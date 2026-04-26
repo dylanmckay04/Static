@@ -12,7 +12,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    rooms = relationship("Room", back_populates="creator", foreign_keys="Room.created_by")
+    created_rooms = relationship("Room", back_populates="creator", foreign_keys="Room.created_by")
     room_memberships = relationship("RoomMember", back_populates="user", cascade="all, delete-orphan")
     messages = relationship("Message", back_populates="author")
     
