@@ -10,7 +10,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.core.limiter import limiter
 from app.database import engine
-from app.routers import auth, rooms
+from app.routers import auth, rooms, debug
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +82,4 @@ def health_check():
 
 app.include_router(auth.router)
 app.include_router(rooms.router)
+app.include_router(debug.router)

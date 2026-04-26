@@ -32,6 +32,7 @@ def register_user(payload: UserCreate, db: Session) -> User:
 
 
 def login_user(email: str, password: str, db: Session) -> str:
+    """Validate credentials and return a signed access token."""
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(
@@ -39,11 +40,18 @@ def login_user(email: str, password: str, db: Session) -> str:
             detail="Incorrect email or password."
         )
     
-    return create_access_token(data={"sub": user.id})
+    return create_access_token(data={"sub": str(user.id)})
 
 
 async def issue_socket_tocken(user: User) -> tuple[str, str]:
-    token, jti = create_socket_token(data={"sub": user.id})
+    """
+    Create a short-lived socket token and register its JTI in Redis.
+ 
+    The JTI is stored with a TTL matching the token lifetime so that
+    the WebSocket endpoint can verify the token has not already been
+    consumed (one-time-use).
+    """
+    token, jti = create_socket_token(data={"sub": str(user.id)})
     
     await redis_client.setex(
         f"socket_id:{jti}",

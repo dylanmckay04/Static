@@ -19,5 +19,5 @@ class RoomMember(Base):
     joined_at = Column(DateTime(timezone=True), server_default=func.now())
     
     
-    user = relationship("User", back_populates="room_memberships")
+    user = relationship("User", back_populates="room_members")
     room = relationship("Room", back_populates="members")
