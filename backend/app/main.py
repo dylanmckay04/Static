@@ -9,7 +9,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.core.limiter import limiter
 from app.database import engine
-#from app.routers import #TODO
+from app.routers import auth, rooms
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,11 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "An unexpected error occurred"}
     )
     
-#TODO add routers
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+app.include_router(auth.router)
+app.include_router(rooms.router)
