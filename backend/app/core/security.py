@@ -1,23 +1,31 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+import bcrypt
 from jose import jwt, JWTError
-from passlib.context import CryptContext
+
 from app.core.config import settings
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 24 hours
 SOCKET_TOKEN_EXPIRE_SECONDS = 60
 
-pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+# Password hashing
+
+def _prehash(password: str) -> bytes:
+    """SHA-256 hex digest of the password, encoded to bytes for bcrypt."""
+    return hashlib.sha256(password.encode()).hexdigest().encode()
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(_prehash(password), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(_prehash(plain), hashed.encode())
 
+
+# Token helpers
 
 def _create_signed_token(data: dict, expires_delta: timedelta, token_type: str) -> str:
     to_encode = data.copy()
