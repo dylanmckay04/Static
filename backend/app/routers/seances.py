@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_seeker, get_db
 from app.core.limiter import limiter
 from app.models.seeker import Seeker
+from app.realtime.hub import hub
 from app.schemas.presence import OwnPresenceResponse, PresenceResponse
 from app.schemas.seance import SeanceCreate, SeanceDetail, SeanceResponse
 from app.services import seance_service
@@ -56,6 +57,8 @@ async def enter_seance(
     current_seeker: Seeker = Depends(get_current_seeker),
 ):
     presence = seance_service.enter_seance(seance_id, current_seeker, db)
+    # Notify connected WebSocket clients that a new Presence has arrived.
+    await hub.broadcast(seance_id, {"op": "enter", "sigil": presence.sigil})
     return OwnPresenceResponse(
         sigil=presence.sigil,
         role=presence.role,

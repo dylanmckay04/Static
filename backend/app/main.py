@@ -12,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.limiter import limiter
 from app.database import engine
-from app.routers import auth, debug, seances
+from app.routers import auth, debug, seances, whispers, ws
 
 logger = logging.getLogger(__name__)
 
@@ -101,4 +101,6 @@ def health_check():
 
 app.include_router(auth.router)
 app.include_router(seances.router)
+app.include_router(whispers.router)
+app.include_router(ws.router)
 app.include_router(debug.router)
