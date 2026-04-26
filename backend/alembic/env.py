@@ -6,7 +6,11 @@ from sqlalchemy import pool
 from alembic import context
 
 # Import your models here for autogenerate support
-from app.models import Base
+from app.database import Base
+from app.models.user import User
+from app.models.room import Room
+from app.models.room_member import RoomMember, MemberRole
+from app.models.message import Message
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
