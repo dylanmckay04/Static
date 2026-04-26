@@ -6,7 +6,7 @@ from app.core.limiter import limiter
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse, SocketTokenResponse
 from app.schemas.user import UserCreate, UserResponse
-from backend.app.services.auth_service import register_user, login_user, issue_socket_tocken
+from app.services.auth_service import register_user, login_user, issue_socket_tocken
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
