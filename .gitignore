@@ -1,10 +1,40 @@
-# Environment
-.env
-
-# Compile / Build Files
+# Python build artifacts
+*.egg-info/
+__pycache__/
 *.pyc
-__pycache__
-.pytest_cache
-build
-node_modules
+*.pyo
+*.pyd
+dist/
+build/
+.eggs/
 
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/
+
+# Environment files (secrets)
+.env
+.env.*
+!.env.example
+
+# Node / frontend
+node_modules/
+.parcel-cache/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
