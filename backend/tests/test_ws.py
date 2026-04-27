@@ -1,12 +1,11 @@
 """WebSocket tests — connect, whisper round-trip, rate limit."""
 from __future__ import annotations
 
-import asyncio
 import json
 
 import pytest
-import websockets
 from httpx import ASGITransport, AsyncClient
+from httpx_ws import aconnect_ws
 
 from app.main import app
 
@@ -29,6 +28,7 @@ async def test_ws_connect_and_whisper_roundtrip(client, make_token, db_session):
 
     # Create seance as alice (warden)
     r = await client.post("/seances", json={"name": "WS Test Room"}, headers=auth(alice))
+    assert r.status_code == 201
     sid = r.json()["id"]
 
     # Bob enters via REST
@@ -38,25 +38,23 @@ async def test_ws_connect_and_whisper_roundtrip(client, make_token, db_session):
     alice_st = await get_socket_token(client, alice)
     bob_st   = await get_socket_token(client, bob)
 
-    # Test that both can connect without errors
-    from starlette.testclient import TestClient
-    tc = TestClient(app)
-    
-    # Alice connects successfully
-    with tc.websocket_connect(f"/ws/seances/{sid}?token={alice_st}") as ws_alice:
-        assert ws_alice is not None
-        # Verify connection stays open (no immediate close)
-        # Send a whisper message
-        ws_alice.send_text(json.dumps({"op": "whisper", "content": "test message"}))
-        # Connection should remain open after sending
-        assert ws_alice is not None
-    
-    # Bob connects successfully
-    with tc.websocket_connect(f"/ws/seances/{sid}?token={bob_st}") as ws_bob:
-        assert ws_bob is not None
-        # Verify connection stays open
-        ws_bob.send_text(json.dumps({"op": "whisper", "content": "bob message"}))
-        assert ws_bob is not None
+    # Alice connects and sends a whisper — stays in the same event loop /
+    # same db_session override as the rest of the test.
+    async with aconnect_ws(f"/ws/seances/{sid}?token={alice_st}", client) as ws_alice:
+        await ws_alice.send_text(json.dumps({"op": "whisper", "content": "test message"}))
+        # Expect the broadcast echo back to alice herself
+        raw = await ws_alice.receive_text()
+        msg = json.loads(raw)
+        assert msg["op"] == "whisper"
+        assert msg["whisper"]["content"] == "test message"
+
+    # Bob connects and sends a whisper
+    async with aconnect_ws(f"/ws/seances/{sid}?token={bob_st}", client) as ws_bob:
+        await ws_bob.send_text(json.dumps({"op": "whisper", "content": "bob message"}))
+        raw = await ws_bob.receive_text()
+        msg = json.loads(raw)
+        assert msg["op"] == "whisper"
+        assert msg["whisper"]["content"] == "bob message"
 
 
 @pytest.mark.asyncio
