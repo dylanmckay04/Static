@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './store/auth'
+import { ToastProvider } from './components/Toast'
 import LoginPage    from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import LobbyPage    from './pages/LobbyPage'
@@ -13,15 +14,17 @@ function Protected({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/"            element={<Navigate to="/lobby" replace />} />
-        <Route path="/login"       element={<LoginPage />} />
-        <Route path="/register"    element={<RegisterPage />} />
-        <Route path="/lobby"       element={<Protected><LobbyPage /></Protected>} />
-        <Route path="/seances/:id" element={<Protected><RoomPage /></Protected>} />
-        <Route path="*"            element={<Navigate to="/lobby" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/"            element={<Navigate to="/lobby" replace />} />
+          <Route path="/login"       element={<LoginPage />} />
+          <Route path="/register"    element={<RegisterPage />} />
+          <Route path="/lobby"       element={<Protected><LobbyPage /></Protected>} />
+          <Route path="/seances/:id" element={<Protected><RoomPage /></Protected>} />
+          <Route path="*"            element={<Navigate to="/lobby" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   )
 }

@@ -22,7 +22,7 @@ export default function RegisterPage() {
       setToken(access_token)
       navigate('/lobby', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Registration failed')
+      setError(err instanceof ApiError ? err.message : 'The ritual failed. Try again.')
     } finally {
       setLoading(false)
     }
@@ -31,26 +31,26 @@ export default function RegisterPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1 className="auth-title">Veil</h1>
-        <p className="auth-subtitle">Create your account</p>
+        <h1 className="auth-title flicker">Veil</h1>
+        <p className="auth-subtitle">Inscribe your name in the book</p>
         <form onSubmit={handleSubmit} className="auth-form">
           <input
-            className="input" type="email" placeholder="Email"
+            className="input" type="email" placeholder="Your address"
             value={email} onChange={e => setEmail(e.target.value)}
             required autoFocus
           />
           <input
-            className="input" type="password" placeholder="Password"
+            className="input" type="password" placeholder="Passphrase (8 characters or more)"
             value={password} onChange={e => setPassword(e.target.value)}
             required minLength={8}
           />
           {error && <p className="error-msg">{error}</p>}
           <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? 'Creating account…' : 'Create account'}
+            {loading ? 'Inscribing…' : 'Bind my name'}
           </button>
         </form>
         <p className="auth-link">
-          Have an account? <Link to="/login">Sign in</Link>
+          Already bound? <Link to="/login">Enter</Link>
         </p>
       </div>
     </div>

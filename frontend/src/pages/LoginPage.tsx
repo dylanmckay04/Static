@@ -21,7 +21,7 @@ export default function LoginPage() {
       setToken(access_token)
       navigate('/lobby', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Login failed')
+      setError(err instanceof ApiError ? err.message : 'The veil refused you.')
     } finally {
       setLoading(false)
     }
@@ -30,26 +30,26 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1 className="auth-title">Veil</h1>
+        <h1 className="auth-title flicker">Veil</h1>
         <p className="auth-subtitle">Step through the veil</p>
         <form onSubmit={handleSubmit} className="auth-form">
           <input
-            className="input" type="email" placeholder="Email"
+            className="input" type="email" placeholder="Your address"
             value={email} onChange={e => setEmail(e.target.value)}
             required autoFocus
           />
           <input
-            className="input" type="password" placeholder="Password"
+            className="input" type="password" placeholder="Passphrase"
             value={password} onChange={e => setPassword(e.target.value)}
             required
           />
           {error && <p className="error-msg">{error}</p>}
           <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? 'Entering…' : 'Enter'}
+            {loading ? 'Parting the veil…' : 'Enter'}
           </button>
         </form>
         <p className="auth-link">
-          No account? <Link to="/register">Register</Link>
+          No account? <Link to="/register">Inscribe your name</Link>
         </p>
       </div>
     </div>

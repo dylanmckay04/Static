@@ -7,23 +7,23 @@ import {
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { departSeance, dissolveSeance, enterSeance, getMyPresence, getSeance, getWhispers, listPresences } from '../api/seances'
+import { departSeance, dissolveSeance, enterSeance, getMyPresence, getWhispers, listPresences } from '../api/seances'
 import type { OwnPresenceResponse, PresenceResponse, WhisperResponse } from '../api/types'
 import type { WsMessage } from '../api/types'
+import { sigilSvgHtml } from '../lib/sigil'
+import {
+  isEnabled,
+  playConnectionDrop,
+  playMessageSent,
+  playReconnected,
+  playWhisperReceived,
+  setEnabled as setSoundEnabled,
+} from '../lib/sounds'
+import { useToast } from '../components/Toast'
 import { useSeanceSocket } from '../lib/useSeanceSocket'
 import { useAuth } from '../store/auth'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const SIGIL_COLORS = [
-  '#a78bfa', '#60a5fa', '#34d399', '#f472b6',
-  '#fb923c', '#e879f9', '#2dd4bf', '#facc15',
-]
-function sigilColor(sigil: string) {
-  let h = 0
-  for (let i = 0; i < sigil.length; i++) h = (h * 31 + sigil.charCodeAt(i)) | 0
-  return SIGIL_COLORS[Math.abs(h) % SIGIL_COLORS.length]
-}
 
 function formatTime(iso: string) {
   const d = new Date(iso)
@@ -33,11 +33,19 @@ function formatTime(iso: string) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + timeStr
 }
 
-/** Merge two whisper arrays, de-duplicate by id, sort oldest→newest. */
 function mergeWhispers(a: WhisperResponse[], b: WhisperResponse[]): WhisperResponse[] {
   const map = new Map<number, WhisperResponse>()
   for (const w of [...a, ...b]) map.set(w.id, w)
   return Array.from(map.values()).sort((x, y) => x.id - y.id)
+}
+
+function SigilSeal({ sigil, size = 28 }: { sigil: string; size?: number }) {
+  return (
+    <span
+      className="presence-sigil-seal"
+      dangerouslySetInnerHTML={{ __html: sigilSvgHtml(sigil, size) }}
+    />
+  )
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -49,26 +57,28 @@ export default function RoomPage() {
   const seanceId    = Number(id)
   const { token, clearToken } = useAuth()
   const navigate    = useNavigate()
+  const toast       = useToast()
 
-  const [status,     setStatus]     = useState<PageStatus>('loading')
-  const [pageError,  setPageError]  = useState<string | null>(null)
-  const [seanceName, setSeanceName] = useState('')
-  const [myPresence, setMyPresence] = useState<OwnPresenceResponse | null>(null)
-  const [presences,  setPresences]  = useState<PresenceResponse[]>([])
-  const [whispers,   setWhispers]   = useState<WhisperResponse[]>([])
-  const [nextBefore, setNextBefore] = useState<number | null>(null)
+  const [status,      setStatus]      = useState<PageStatus>('loading')
+  const [pageError,   setPageError]   = useState<string | null>(null)
+  const [seanceName,  setSeanceName]  = useState('')
+  const [myPresence,  setMyPresence]  = useState<OwnPresenceResponse | null>(null)
+  const [presences,   setPresences]   = useState<PresenceResponse[]>([])
+  const [whispers,    setWhispers]    = useState<WhisperResponse[]>([])
+  const [nextBefore,  setNextBefore]  = useState<number | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [draft,      setDraft]      = useState('')
-  const [wsReady,    setWsReady]    = useState(false)
+  const [draft,       setDraft]       = useState('')
+  const [wsReady,     setWsReady]     = useState(false)
+  const [soundOn,     setSoundOn]     = useState(false)
 
-  const bottomRef    = useRef<HTMLDivElement>(null)
-  const textareaRef  = useRef<HTMLTextAreaElement>(null)
-  const mountedRef   = useRef(true)
-  const mySignRef    = useRef<string>('')  // stable ref for sigil used in callbacks
+  const bottomRef   = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const mountedRef  = useRef(true)
+  const prevWsStatus = useRef<string>('')
 
   useEffect(() => { return () => { mountedRef.current = false } }, [])
 
-  // ── Initial load ─────────────────────────────────────────────────────────
+  // ── Initial load ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!token) return
@@ -76,23 +86,12 @@ export default function RoomPage() {
 
     const init = async () => {
       try {
-        // 1. Enter seance or recover existing presence
         let own: OwnPresenceResponse
         try {
           own = await enterSeance(seanceId, token)
         } catch (err) {
           if (err instanceof ApiError && err.status === 409) {
-            // Already present (e.g., warden, or page refresh) — recover existing presence
-            try {
-              own = await getMyPresence(seanceId, token)
-            } catch (getErr) {
-              if (getErr instanceof ApiError && getErr.status === 404) {
-                // Shouldn't happen (409 means we're present), but fallback to trying enter again
-                own = await enterSeance(seanceId, token)
-              } else {
-                throw getErr
-              }
-            }
+            own = await getMyPresence(seanceId, token)
           } else if (err instanceof ApiError && err.status === 401) {
             clearToken(); return
           } else {
@@ -100,39 +99,29 @@ export default function RoomPage() {
           }
         }
         if (cancelled) return
-        mySignRef.current = own.sigil
         setMyPresence(own)
 
-        // 2. Parallel: seance details (just for name) + presence list
         const [, presenceList] = await Promise.all([
-          // Fetch seance details for the name
-          (async () => {
-            try {
-              const details = await getSeance(seanceId, token)
-              if (!cancelled && details.name) setSeanceName(details.name)
-            } catch (err) {
-              console.warn('Could not fetch seance details:', err)
-              // Non-critical; continue anyway
-            }
-          })(),
+          fetch(`http://localhost:8000/seances/${seanceId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then(r => r.json()).then((d: { name: string }) => {
+            if (!cancelled) setSeanceName(d.name)
+          }),
           listPresences(seanceId, token),
         ])
         if (cancelled) return
         setPresences(presenceList)
 
-        // 3. Initial whisper history (newest 50, reversed to oldest-first)
         const page = await getWhispers(seanceId, { limit: 50 }, token)
         if (cancelled) return
-        const initial = [...page.items].reverse()
-        setWhispers(initial)
+        setWhispers([...page.items].reverse())
         setNextBefore(page.next_before_id)
 
         setStatus('ready')
         setWsReady(true)
       } catch (err) {
         if (!cancelled) {
-          console.error('Error initializing room:', err)
-          setPageError(err instanceof ApiError ? err.message : 'Failed to join séance')
+          setPageError(err instanceof ApiError ? err.message : 'The séance could not be entered.')
           setStatus('error')
         }
       }
@@ -142,13 +131,13 @@ export default function RoomPage() {
     return () => { cancelled = true }
   }, [seanceId, token, clearToken])
 
-  // ── Auto-scroll to bottom on new messages ────────────────────────────────
+  // ── Auto-scroll ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [whispers.length])
 
-  // ── WS message handler ───────────────────────────────────────────────────
+  // ── WS message handler ────────────────────────────────────────────────────
 
   const handleWsMessage = useCallback((msg: WsMessage) => {
     switch (msg.op) {
@@ -158,6 +147,11 @@ export default function RoomPage() {
           sigil: msg.sigil, content: msg.content, created_at: msg.created_at,
         }
         setWhispers(prev => mergeWhispers(prev, [w]))
+        // Only play sound for others' whispers
+        setMyPresence(me => {
+          if (me && msg.sigil !== me.sigil) playWhisperReceived()
+          return me
+        })
         break
       }
       case 'enter':
@@ -170,12 +164,13 @@ export default function RoomPage() {
         setPresences(prev => prev.filter(p => p.sigil !== msg.sigil))
         break
       case 'dissolve':
-        navigate('/lobby')
+        toast('The séance has been dissolved.', 'danger')
+        setTimeout(() => navigate('/lobby'), 1200)
         break
     }
-  }, [navigate])
+  }, [navigate, toast])
 
-  // ── Reconnect backfill ───────────────────────────────────────────────────
+  // ── Reconnect backfill ────────────────────────────────────────────────────
 
   const handleReconnect = useCallback(async (lastSeenId: number) => {
     if (!token) return
@@ -187,7 +182,7 @@ export default function RoomPage() {
     } catch { /* silently ignore */ }
   }, [seanceId, token])
 
-  // ── Socket hook ──────────────────────────────────────────────────────────
+  // ── Socket hook ───────────────────────────────────────────────────────────
 
   const { wsStatus, sendWhisper, setLastSeen } = useSeanceSocket({
     seanceId,
@@ -197,46 +192,68 @@ export default function RoomPage() {
     onReconnect: handleReconnect,
   })
 
-  // Sync lastSeen into the hook whenever whispers state changes
+  // ── WS status toasts ──────────────────────────────────────────────────────
+
   useEffect(() => {
-    if (whispers.length > 0) {
-      setLastSeen(whispers[whispers.length - 1].id)
+    const prev = prevWsStatus.current
+    prevWsStatus.current = wsStatus
+    if (prev === wsStatus || prev === '') return
+    if (wsStatus === 'reconnecting') {
+      toast('The veil shudders… seeking the other side.', 'danger')
+      playConnectionDrop()
+    } else if (wsStatus === 'connected' && prev === 'reconnecting') {
+      toast('The channel is open once more.', 'success')
+      playReconnected()
+    } else if (wsStatus === 'dead') {
+      toast('Contact has been lost. Refresh to try again.', 'danger')
     }
+  }, [wsStatus, toast])
+
+  // ── Sync lastSeen ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (whispers.length > 0) setLastSeen(whispers[whispers.length - 1].id)
   }, [whispers, setLastSeen])
 
-  // ── Load older history ───────────────────────────────────────────────────
+  // ── Load older history ────────────────────────────────────────────────────
 
   const loadMore = async () => {
     if (!token || !nextBefore || loadingMore) return
     setLoadingMore(true)
     try {
       const page = await getWhispers(seanceId, { limit: 50, before_id: nextBefore }, token)
-      const older = [...page.items].reverse()
-      setWhispers(prev => mergeWhispers(older, prev))
+      setWhispers(prev => mergeWhispers([...page.items].reverse(), prev))
       setNextBefore(page.next_before_id)
     } catch { /* ignore */ } finally {
       setLoadingMore(false)
     }
   }
 
-  // ── Send ─────────────────────────────────────────────────────────────────
+  // ── Send ──────────────────────────────────────────────────────────────────
 
   const sendDraft = () => {
     const content = draft.trim()
     if (!content || wsStatus !== 'connected') return
     sendWhisper(content)
+    playMessageSent()
     setDraft('')
     textareaRef.current?.focus()
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendDraft()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDraft() }
   }
 
-  // ── Depart / dissolve ────────────────────────────────────────────────────
+  // ── Sound toggle ──────────────────────────────────────────────────────────
+
+  const toggleSound = () => {
+    const next = !soundOn
+    setSoundOn(next)
+    setSoundEnabled(next)
+    toast(next ? 'The candles are lit.' : 'Silence descends.', 'accent')
+  }
+
+  // ── Depart / dissolve ─────────────────────────────────────────────────────
 
   const handleDepart = async () => {
     if (!token) return
@@ -246,18 +263,18 @@ export default function RoomPage() {
 
   const handleDissolve = async () => {
     if (!token) return
-    if (!confirm('Dissolve this séance? This cannot be undone.')) return
+    if (!confirm('Dissolve this séance? The circle cannot be reopened.')) return
     try { await dissolveSeance(seanceId, token) } catch { /* ignore */ }
     navigate('/lobby')
   }
 
-  // ── Render guards ────────────────────────────────────────────────────────
+  // ── Render guards ─────────────────────────────────────────────────────────
 
   if (status === 'loading') {
     return (
       <div className="center-page">
         <div className="spinner" />
-        <span>Stepping through the veil…</span>
+        <span>Lighting the candles…</span>
       </div>
     )
   }
@@ -267,7 +284,7 @@ export default function RoomPage() {
       <div className="center-page">
         <p className="error-msg">{pageError}</p>
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/lobby')}>
-          ← Back to lobby
+          ← Return to the lobby
         </button>
       </div>
     )
@@ -275,15 +292,16 @@ export default function RoomPage() {
 
   const isWarden = myPresence?.role === 'warden'
 
+  const composerPlaceholder =
+    wsStatus === 'connected'    ? 'Whisper into the void… (Enter to send, Shift+Enter for newline)'
+    : wsStatus === 'reconnecting' ? 'Seeking the other side…'
+    : 'Contact has been lost'
+
   return (
     <div className="room-layout">
       {/* Header */}
       <header className="room-header">
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => navigate('/lobby')}
-          title="Back to lobby"
-        >
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/lobby')} title="Return to lobby">
           ←
         </button>
         <span className="room-header-title">{seanceName}</span>
@@ -292,17 +310,18 @@ export default function RoomPage() {
             {myPresence.sigil}
           </span>
         )}
-        <span className={`ws-status ${wsStatus}`}>
-          {wsStatus}
-        </span>
+        <span className={`ws-status ${wsStatus}`}>{wsStatus}</span>
+        <button
+          className={`sound-toggle${soundOn ? ' active' : ''}`}
+          onClick={toggleSound}
+          title={soundOn ? 'Silence the candles' : 'Light the candles'}
+        >
+          {soundOn ? '🕯' : '🕯'}
+        </button>
         {isWarden ? (
-          <button className="btn btn-danger btn-sm" onClick={handleDissolve}>
-            Dissolve
-          </button>
+          <button className="btn btn-danger btn-sm" onClick={handleDissolve}>Dissolve</button>
         ) : (
-          <button className="btn btn-ghost btn-sm" onClick={handleDepart}>
-            Depart
-          </button>
+          <button className="btn btn-ghost btn-sm" onClick={handleDepart}>Depart</button>
         )}
       </header>
 
@@ -317,16 +336,9 @@ export default function RoomPage() {
                 key={p.sigil}
                 className={`presence-item${p.sigil === myPresence?.sigil ? ' is-me' : ''}`}
               >
-                <span
-                  className="presence-dot"
-                  style={{ background: sigilColor(p.sigil) }}
-                />
-                <span className="presence-sigil" title={p.sigil}>
-                  {p.sigil}
-                </span>
-                {p.role === 'warden' && (
-                  <span className="presence-role">w</span>
-                )}
+                <SigilSeal sigil={p.sigil} size={22} />
+                <span className="presence-sigil" title={p.sigil}>{p.sigil}</span>
+                {p.role === 'warden' && <span className="presence-role">w</span>}
               </div>
             ))}
           </div>
@@ -336,18 +348,14 @@ export default function RoomPage() {
         <div className="feed-column">
           <div className="feed-scroll">
             {nextBefore !== null && (
-              <button
-                className="load-more-btn"
-                onClick={loadMore}
-                disabled={loadingMore}
-              >
-                {loadingMore ? 'Loading…' : 'Load older messages'}
+              <button className="load-more-btn" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? 'Reaching further back…' : 'Summon older whispers'}
               </button>
             )}
 
             {whispers.length === 0 && (
-              <p className="empty-state" style={{ marginTop: 40 }}>
-                No whispers yet. Say something.
+              <p className="empty-state" style={{ marginTop: 48 }}>
+                The board is silent. Whisper first.
               </p>
             )}
 
@@ -357,9 +365,12 @@ export default function RoomPage() {
                 className={`whisper-row${w.sigil === myPresence?.sigil ? ' is-mine' : ''}`}
               >
                 <div className="whisper-header">
+                  <span className="whisper-sigil-seal">
+                    <SigilSeal sigil={w.sigil} size={20} />
+                  </span>
                   <span
                     className="whisper-sigil"
-                    style={{ color: sigilColor(w.sigil) }}
+                    style={{ color: w.sigil === myPresence?.sigil ? 'var(--accent)' : 'var(--muted)' }}
                   >
                     {w.sigil}
                   </span>
@@ -377,13 +388,7 @@ export default function RoomPage() {
             <textarea
               ref={textareaRef}
               className="composer-input"
-              placeholder={
-                wsStatus === 'connected'
-                  ? 'Whisper into the void… (Enter to send, Shift+Enter for newline)'
-                  : wsStatus === 'reconnecting'
-                  ? 'Reconnecting…'
-                  : 'Connection lost'
-              }
+              placeholder={composerPlaceholder}
               value={draft}
               onChange={e => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
