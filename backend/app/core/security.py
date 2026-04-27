@@ -93,3 +93,22 @@ def decode_access_token(token: str | None) -> dict | None:
 
 def decode_socket_token(token: str | None) -> dict | None:
     return _decode_token(token, "socket")
+
+
+def create_invite_token(data: dict, expires_delta_seconds: int) -> tuple[str, str]:
+    """Mint a single-use invite token and return ``(token, jti)``.
+
+    Unlike socket tokens (which live in Redis), invites are persisted in
+    the ``invites`` DB table so they can be audited.
+    """
+    jti = uuid4().hex
+    token = _create_signed_token(
+        {**data, "jti": jti},
+        timedelta(seconds=expires_delta_seconds),
+        "invite",
+    )
+    return token, jti
+
+
+def decode_invite_token(token: str | None) -> dict | None:
+    return _decode_token(token, "invite")
