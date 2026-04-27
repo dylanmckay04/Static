@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session as DbSession
+from sqlalchemy.orm import Session
 
 from app.models.presence import Presence, PresenceRole
 from app.models.seance import Seance
@@ -14,7 +14,7 @@ from app.services.presence_service import assign_presence
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _get_seance_or_404(seance_id: int, db: DbSession) -> Seance:
+def _get_seance_or_404(seance_id: int, db: Session) -> Seance:
     seance = db.query(Seance).filter(Seance.id == seance_id).first()
     if not seance:
         raise HTTPException(
@@ -24,7 +24,7 @@ def _get_seance_or_404(seance_id: int, db: DbSession) -> Seance:
     return seance
 
 
-def _get_presence(seance_id: int, seeker_id: int, db: DbSession) -> Presence | None:
+def _get_presence(seance_id: int, seeker_id: int, db: Session) -> Presence | None:
     return (
         db.query(Presence)
         .filter(Presence.seance_id == seance_id, Presence.seeker_id == seeker_id)
@@ -32,7 +32,7 @@ def _get_presence(seance_id: int, seeker_id: int, db: DbSession) -> Presence | N
     )
 
 
-def _require_visibility(seance: Seance, seeker_id: int, db: DbSession) -> Presence | None:
+def _require_visibility(seance: Seance, seeker_id: int, db: Session) -> Presence | None:
     """For sealed seances: 403 unless the Seeker has an existing Presence.
 
     Returns the Presence if one exists (whether or not the seance is
@@ -47,7 +47,7 @@ def _require_visibility(seance: Seance, seeker_id: int, db: DbSession) -> Presen
     return presence
 
 
-def _require_warden(seance: Seance, seeker_id: int, db: DbSession) -> Presence:
+def _require_warden(seance: Seance, seeker_id: int, db: Session) -> Presence:
     presence = _get_presence(seance.id, seeker_id, db)
     if not presence or presence.role != PresenceRole.warden:
         raise HTTPException(
@@ -57,7 +57,7 @@ def _require_warden(seance: Seance, seeker_id: int, db: DbSession) -> Presence:
     return presence
 
 
-def _build_seance_detail(seance: Seance, db: DbSession) -> SeanceDetail:
+def _build_seance_detail(seance: Seance, db: Session) -> SeanceDetail:
     presence_count = (
         db.query(Presence).filter(Presence.seance_id == seance.id).count()
     )
@@ -75,11 +75,7 @@ def _build_seance_detail(seance: Seance, db: DbSession) -> SeanceDetail:
 # Public service surface
 # ---------------------------------------------------------------------------
 
-def create_seance(
-    payload: SeanceCreate,
-    current_seeker: Seeker,
-    db: DbSession,
-) -> Seance:
+def create_seance(payload: SeanceCreate, current_seeker: Seeker, db: Session) -> Seance:
     existing = db.query(Seance).filter(Seance.name == payload.name).first()
     if existing:
         raise HTTPException(
@@ -110,7 +106,7 @@ def create_seance(
     return seance
 
 
-def list_seances(current_seeker: Seeker, db: DbSession) -> list[Seance]:
+def list_seances(current_seeker: Seeker, db: Session) -> list[Seance]:
     """All open seances, plus any sealed seances the Seeker has Presence in."""
     open_seances = db.query(Seance).filter(Seance.is_sealed == False).all()  # noqa: E712
 
@@ -128,17 +124,13 @@ def list_seances(current_seeker: Seeker, db: DbSession) -> list[Seance]:
     return sorted(by_id.values(), key=lambda s: s.created_at)
 
 
-def get_seance(seance_id: int, current_seeker: Seeker, db: DbSession) -> SeanceDetail:
+def get_seance(seance_id: int, current_seeker: Seeker, db: Session) -> SeanceDetail:
     seance = _get_seance_or_404(seance_id, db)
     _require_visibility(seance, current_seeker.id, db)
     return _build_seance_detail(seance, db)
 
 
-def enter_seance(
-    seance_id: int,
-    current_seeker: Seeker,
-    db: DbSession,
-) -> Presence:
+def enter_seance(seance_id: int, current_seeker: Seeker, db: Session) -> Presence:
     """Become a Presence in the seance — a fresh sigil is minted each time."""
     seance = _get_seance_or_404(seance_id, db)
 
@@ -166,11 +158,12 @@ def enter_seance(
     return presence
 
 
-def depart_seance(
-    seance_id: int,
-    current_seeker: Seeker,
-    db: DbSession,
-) -> None:
+def depart_seance(seance_id: int, current_seeker: Seeker, db: Session) -> str:
+    """Remove the Seeker's Presence and return their sigil for broadcast.
+
+    Returns the sigil so the caller can notify connected WebSocket clients
+    that this Presence has departed.
+    """
     presence = _get_presence(seance_id, current_seeker.id, db)
     if not presence:
         raise HTTPException(
@@ -187,15 +180,13 @@ def depart_seance(
             ),
         )
 
+    sigil = presence.sigil
     db.delete(presence)
     db.commit()
+    return sigil
 
 
-def list_presences(
-    seance_id: int,
-    current_seeker: Seeker,
-    db: DbSession,
-) -> list[Presence]:
+def list_presences(seance_id: int, current_seeker: Seeker, db: Session) -> list[Presence]:
     """Visible to anyone with access to the seance."""
     seance = _get_seance_or_404(seance_id, db)
     _require_visibility(seance, current_seeker.id, db)
@@ -207,11 +198,7 @@ def list_presences(
     )
 
 
-def dissolve_seance(
-    seance_id: int,
-    current_seeker: Seeker,
-    db: DbSession,
-) -> None:
+def dissolve_seance(seance_id: int, current_seeker: Seeker, db: Session) -> None:
     """Wardens-only: tear down the seance and cascade everything inside."""
     seance = _get_seance_or_404(seance_id, db)
     _require_warden(seance, current_seeker.id, db)

@@ -75,7 +75,8 @@ async def depart_seance(
     db: Session = Depends(get_db),
     current_seeker: Seeker = Depends(get_current_seeker),
 ):
-    seance_service.depart_seance(seance_id, current_seeker, db)
+    sigil = seance_service.depart_seance(seance_id, current_seeker, db)
+    await hub.broadcast(seance_id, {"op": "depart", "sigil": sigil})
 
 
 @router.get("/{seance_id}/presences", response_model=list[PresenceResponse])
@@ -97,4 +98,8 @@ async def dissolve_seance(
     db: Session = Depends(get_db),
     current_seeker: Seeker = Depends(get_current_seeker),
 ):
+    # Broadcast *before* deletion -- the cascade wipes the DB row immediately,
+    # so we publish while the Redis channel is still reachable. Connected
+    # clients receive {"op":"dissolve"} and can redirect gracefully.
+    await hub.broadcast(seance_id, {"op": "dissolve"})
     seance_service.dissolve_seance(seance_id, current_seeker, db)
