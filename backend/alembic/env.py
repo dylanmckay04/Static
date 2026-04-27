@@ -6,6 +6,7 @@ from alembic import context
 
 # Importing the models package registers every model class on Base.metadata,
 # which Alembic needs for --autogenerate to see the schema.
+from app.core.config import settings
 from app.database import Base
 from app import models  # noqa: F401  (side-effect import for metadata)
 
@@ -31,8 +32,11 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
