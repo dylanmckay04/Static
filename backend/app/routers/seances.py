@@ -44,11 +44,7 @@ async def get_seance(
     return seance_service.get_seance(seance_id, current_seeker, db)
 
 
-@router.post(
-    "/{seance_id}/enter",
-    response_model=OwnPresenceResponse,
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/{seance_id}/enter", response_model=OwnPresenceResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("30/minute")
 async def enter_seance(
     request: Request,
