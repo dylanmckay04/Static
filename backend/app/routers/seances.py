@@ -118,3 +118,41 @@ async def set_presence_role(
 ):
     """Warden: promote an attendant to moderator, or demote a moderator back."""
     return seance_service.set_presence_role(seance_id, target_seeker_id, role, current_seeker, db)
+
+
+# ── Sigil-based warden controls (frontend-friendly — no seeker_id needed) ──
+
+@router.delete("/{seance_id}/presences/sigil/{sigil}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
+async def kick_by_sigil(
+    request: Request, seance_id: int, sigil: str,
+    db: Session = Depends(get_db),
+    current_seeker: Seeker = Depends(get_current_seeker),
+):
+    """Warden/moderator: kick a Presence by their visible sigil."""
+    evicted = seance_service.kick_by_sigil(seance_id, sigil, current_seeker, db)
+    await hub.broadcast(seance_id, {"op": "depart", "sigil": evicted})
+
+
+@router.post("/{seance_id}/transfer/sigil", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def transfer_wardenship_by_sigil(
+    request: Request, seance_id: int,
+    target_sigil: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_seeker: Seeker = Depends(get_current_seeker),
+):
+    """Warden: hand warden role to the Presence with the given sigil."""
+    seance_service.transfer_wardenship_by_sigil(seance_id, target_sigil, current_seeker, db)
+
+
+@router.patch("/{seance_id}/presences/sigil/{sigil}/role", response_model=PresenceResponse)
+@limiter.limit("20/minute")
+async def set_role_by_sigil(
+    request: Request, seance_id: int, sigil: str,
+    role: PresenceRole = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_seeker: Seeker = Depends(get_current_seeker),
+):
+    """Warden: promote/demote a Presence identified by sigil."""
+    return seance_service.set_role_by_sigil(seance_id, sigil, role, current_seeker, db)

@@ -49,3 +49,14 @@ export const createInvite = (seanceId: number, token: string, expiresInSeconds =
 
 export const joinViaInvite = (inviteToken: string, token: string) =>
   post<OwnPresenceResponse>(`/seances/join?token=${encodeURIComponent(inviteToken)}`, undefined, token)
+
+// ── Sigil-based warden controls (preferred — no seeker_id required) ────────
+
+export const kickBySigil = (seanceId: number, sigil: string, token: string) =>
+  del<void>(`/seances/${seanceId}/presences/sigil/${encodeURIComponent(sigil)}`, token)
+
+export const transferWardenshipBySigil = (seanceId: number, targetSigil: string, token: string) =>
+  post<void>(`/seances/${seanceId}/transfer/sigil`, { target_sigil: targetSigil }, token)
+
+export const setRoleBySigil = (seanceId: number, sigil: string, role: PresenceRole, token: string) =>
+  patch<PresenceResponse>(`/seances/${seanceId}/presences/sigil/${encodeURIComponent(sigil)}/role`, { role }, token)

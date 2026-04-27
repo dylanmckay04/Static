@@ -14,16 +14,15 @@ import {
   enterSeance,
   getMyPresence,
   getWhispers,
-  kickPresence,
+  kickBySigil,
   listPresences,
   redactWhisper,
-  setPresenceRole,
-  transferWardenship,
+  setRoleBySigil,
+  transferWardenshipBySigil,
 } from '../api/seances'
-import type { OwnPresenceResponse, PresenceResponse, WhisperResponse, WsMessage } from '../api/types'
+import type { OwnPresenceResponse, PresenceResponse, PresenceRole, WhisperResponse, WsMessage } from '../api/types'
 import { sigilSvgHtml } from '../lib/sigil'
 import {
-  isEnabled,
   playConnectionDrop,
   playMessageSent,
   playReconnected,
@@ -63,10 +62,6 @@ function SigilSeal({ sigil, size = 28 }: { sigil: string; size?: number }) {
 
 type PageStatus = 'loading' | 'ready' | 'error'
 
-// Presence items enriched with seeker_id (not exposed by API, so we track by sigil)
-// We use sigil as proxy for identity in the UI - the API uses seeker_id for moderation.
-// The debug /me endpoint exposes seeker_id; we use that for our own ID.
-
 export default function RoomPage() {
   const { id }      = useParams<{ id: string }>()
   const seanceId    = Number(id)
@@ -78,7 +73,6 @@ export default function RoomPage() {
   const [pageError,   setPageError]   = useState<string | null>(null)
   const [seanceName,  setSeanceName]  = useState('')
   const [myPresence,  setMyPresence]  = useState<OwnPresenceResponse | null>(null)
-  const [mySeekerId,  setMySeekerId]  = useState<number | null>(null)
   const [presences,   setPresences]   = useState<PresenceResponse[]>([])
   const [whispers,    setWhispers]    = useState<WhisperResponse[]>([])
   const [nextBefore,  setNextBefore]  = useState<number | null>(null)
@@ -86,7 +80,6 @@ export default function RoomPage() {
   const [draft,       setDraft]       = useState('')
   const [wsReady,     setWsReady]     = useState(false)
   const [soundOn,     setSoundOn]     = useState(false)
-  const [inviteUrl,   setInviteUrl]   = useState<string | null>(null)
   const [copying,     setCopying]     = useState(false)
 
   const bottomRef    = useRef<HTMLDivElement>(null)
@@ -119,15 +112,6 @@ export default function RoomPage() {
         if (cancelled) return
         setMyPresence(own)
 
-        // Fetch own seeker_id for moderation actions
-        const meRes = await fetch('http://localhost:8000/debug/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (meRes.ok) {
-          const me = await meRes.json()
-          if (!cancelled) setMySeekerId(me.id)
-        }
-
         const [, presenceList] = await Promise.all([
           fetch(`http://localhost:8000/seances/${seanceId}`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -157,8 +141,6 @@ export default function RoomPage() {
     void init()
     return () => { cancelled = true }
   }, [seanceId, token, clearToken])
-
-  // ── Auto-scroll ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -217,14 +199,12 @@ export default function RoomPage() {
     } catch { /* ignore */ }
   }, [seanceId, token])
 
-  // ── Socket hook ───────────────────────────────────────────────────────────
+  // ── Socket ────────────────────────────────────────────────────────────────
 
   const { wsStatus, sendWhisper, setLastSeen } = useSeanceSocket({
     seanceId, token: token ?? '', enabled: wsReady,
     onMessage: handleWsMessage, onReconnect: handleReconnect,
   })
-
-  // ── WS status toasts ──────────────────────────────────────────────────────
 
   useEffect(() => {
     const prev = prevWsStatus.current
@@ -245,7 +225,7 @@ export default function RoomPage() {
     if (whispers.length > 0) setLastSeen(whispers[whispers.length - 1].id)
   }, [whispers, setLastSeen])
 
-  // ── Load older history ────────────────────────────────────────────────────
+  // ── Load older ────────────────────────────────────────────────────────────
 
   const loadMore = async () => {
     if (!token || !nextBefore || loadingMore) return
@@ -281,17 +261,55 @@ export default function RoomPage() {
     toast(next ? 'The candles are lit.' : 'Silence descends.', 'accent')
   }
 
-  // ── Moderation actions ────────────────────────────────────────────────────
+  // ── Moderation (all sigil-based — no seeker_id needed) ───────────────────
 
   const isWarden = myPresence?.role === 'warden'
   const isMod    = myPresence?.role === 'moderator'
   const canMod   = isWarden || isMod
 
+  const handleKick = async (sigil: string) => {
+    if (!token || !canMod) return
+    try {
+      await kickBySigil(seanceId, sigil, token)
+      // WS depart broadcast will remove them from state; do it optimistically too
+      setPresences(prev => prev.filter(p => p.sigil !== sigil))
+      toast(`${sigil} has been removed.`, 'accent')
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Kick failed.', 'danger')
+    }
+  }
+
+  const handleTransfer = async (sigil: string) => {
+    if (!token || !isWarden) return
+    if (!confirm(`Transfer wardenship to ${sigil}?`)) return
+    try {
+      await transferWardenshipBySigil(seanceId, sigil, token)
+      // Refresh presences to reflect the new roles
+      const updated = await listPresences(seanceId, token)
+      setPresences(updated)
+      // Update our own presence role
+      const ownUpdated = updated.find(p => p.sigil === myPresence?.sigil)
+      if (ownUpdated) setMyPresence(prev => prev ? { ...prev, role: ownUpdated.role } : prev)
+      toast('Wardenship transferred.', 'accent')
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Transfer failed.', 'danger')
+    }
+  }
+
+  const handleSetRole = async (sigil: string, role: PresenceRole) => {
+    if (!token || !isWarden) return
+    try {
+      await setRoleBySigil(seanceId, sigil, role, token)
+      setPresences(prev => prev.map(p => p.sigil === sigil ? { ...p, role } : p))
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Role change failed.', 'danger')
+    }
+  }
+
   const handleRedact = async (whisperId: number) => {
     if (!token || !canMod) return
     try {
       await redactWhisper(seanceId, whisperId, token)
-      // WS broadcast will update state; optimistically update too
       setWhispers(prev => prev.map(w =>
         w.id === whisperId ? { ...w, is_deleted: true, content: '⸻ withdrawn ⸻' } : w
       ))
@@ -305,7 +323,6 @@ export default function RoomPage() {
     try {
       const inv = await createInvite(seanceId, token)
       const url = `${window.location.origin}/invite?token=${encodeURIComponent(inv.token)}`
-      setInviteUrl(url)
       await navigator.clipboard.writeText(url)
       setCopying(true)
       toast('Invitation link copied to the clipboard.', 'accent')
@@ -361,7 +378,7 @@ export default function RoomPage() {
     <div className="room-layout">
       {/* Header */}
       <header className="room-header">
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/lobby')} title="Return to lobby">←</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/lobby')}>←</button>
         <span className="room-header-title">{seanceName}</span>
         {myPresence && (
           <span className="room-header-sigil" title="Your sigil this session">{myPresence.sigil}</span>
@@ -374,7 +391,7 @@ export default function RoomPage() {
         >🕯</button>
         {isWarden ? (
           <>
-            <button className="btn btn-ghost btn-sm" onClick={handleMintInvite} title="Generate invite link">
+            <button className="btn btn-ghost btn-sm" onClick={handleMintInvite}>
               {copying ? 'Copied!' : 'Invite'}
             </button>
             <button className="btn btn-danger btn-sm" onClick={handleDissolve}>Dissolve</button>
@@ -390,17 +407,51 @@ export default function RoomPage() {
         <aside className="presence-sidebar">
           <div className="presence-sidebar-title">Present</div>
           <div className="presence-list">
-            {presences.map(p => (
-              <div
-                key={p.sigil}
-                className={`presence-item${p.sigil === myPresence?.sigil ? ' is-me' : ''}`}
-              >
-                <SigilSeal sigil={p.sigil} size={22} />
-                <span className="presence-sigil" title={p.sigil}>{p.sigil}</span>
-                {p.role === 'warden'    && <span className="presence-role" style={{ color: 'var(--accent)' }}>w</span>}
-                {p.role === 'moderator' && <span className="presence-role" style={{ color: 'var(--muted)' }}>m</span>}
-              </div>
-            ))}
+            {presences.map(p => {
+              const isMe = p.sigil === myPresence?.sigil
+              const canTarget = canMod && !isMe && p.role !== 'warden'
+              return (
+                <div
+                  key={p.sigil}
+                  className={`presence-item${isMe ? ' is-me' : ''}`}
+                >
+                  <SigilSeal sigil={p.sigil} size={22} />
+                  <span className="presence-sigil" title={p.sigil}>{p.sigil}</span>
+                  {p.role === 'warden'    && <span className="presence-role" style={{ color: 'var(--accent)' }}>w</span>}
+                  {p.role === 'moderator' && <span className="presence-role" style={{ color: 'var(--muted)' }}>m</span>}
+                  {canTarget && (
+                    <div className="presence-actions">
+                      <button
+                        className="presence-action-btn"
+                        title="Remove from séance"
+                        onClick={() => handleKick(p.sigil)}
+                      >✕</button>
+                      {isWarden && p.role === 'attendant' && (
+                        <button
+                          className="presence-action-btn"
+                          title="Promote to moderator"
+                          onClick={() => handleSetRole(p.sigil, 'moderator')}
+                        >↑</button>
+                      )}
+                      {isWarden && p.role === 'moderator' && (
+                        <button
+                          className="presence-action-btn"
+                          title="Demote to attendant"
+                          onClick={() => handleSetRole(p.sigil, 'attendant')}
+                        >↓</button>
+                      )}
+                      {isWarden && (
+                        <button
+                          className="presence-action-btn"
+                          title="Transfer wardenship"
+                          onClick={() => handleTransfer(p.sigil)}
+                        >⇒</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </aside>
 

@@ -273,3 +273,97 @@ def set_presence_role(
     db.commit()
     db.refresh(target)
     return target
+
+
+def kick_by_sigil(
+    seance_id: int,
+    sigil: str,
+    current_seeker: Seeker,
+    db: Session,
+) -> str:
+    """Kick a Presence identified by sigil. Returns the sigil for broadcast."""
+    _get_seance_or_404(seance_id, db)
+    actor = _require_warden_or_mod(seance_id, current_seeker.id, db)
+
+    target = (
+        db.query(Presence)
+        .filter(Presence.seance_id == seance_id, Presence.sigil == sigil)
+        .first()
+    )
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="No presence with that sigil.")
+    if target.seeker_id == current_seeker.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="You cannot kick yourself.")
+    if target.role == PresenceRole.warden:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="The warden cannot be kicked.")
+    if target.role == PresenceRole.moderator and actor.role != PresenceRole.warden:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only the warden can remove a moderator.")
+
+    db.delete(target)
+    db.commit()
+    return sigil
+
+
+def transfer_wardenship_by_sigil(
+    seance_id: int,
+    target_sigil: str,
+    current_seeker: Seeker,
+    db: Session,
+) -> None:
+    """Transfer wardenship to the Presence with the given sigil."""
+    seance = _get_seance_or_404(seance_id, db)
+    warden_presence = _require_warden(seance, current_seeker.id, db)
+
+    target = (
+        db.query(Presence)
+        .filter(Presence.seance_id == seance_id, Presence.sigil == target_sigil)
+        .first()
+    )
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="No presence with that sigil.")
+    if target.seeker_id == current_seeker.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="You are already the warden.")
+
+    warden_presence.role = PresenceRole.attendant
+    target.role = PresenceRole.warden
+    seance.created_by = target.seeker_id
+    db.commit()
+
+
+def set_role_by_sigil(
+    seance_id: int,
+    target_sigil: str,
+    new_role: PresenceRole,
+    current_seeker: Seeker,
+    db: Session,
+) -> Presence:
+    """Warden: promote/demote a Presence identified by sigil."""
+    seance = _get_seance_or_404(seance_id, db)
+    _require_warden(seance, current_seeker.id, db)
+
+    if new_role == PresenceRole.warden:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Use /transfer to hand off wardenship.")
+
+    target = (
+        db.query(Presence)
+        .filter(Presence.seance_id == seance_id, Presence.sigil == target_sigil)
+        .first()
+    )
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="No presence with that sigil.")
+    if target.role == PresenceRole.warden:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Cannot demote the warden directly. Use /transfer first.")
+
+    target.role = new_role
+    db.commit()
+    db.refresh(target)
+    return target

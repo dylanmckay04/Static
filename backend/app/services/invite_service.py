@@ -28,12 +28,6 @@ def create_invite(
     if not seance:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seance not found.")
 
-    if not seance.is_sealed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invites are only needed for sealed seances.",
-        )
-
     presence = (
         db.query(Presence)
         .filter(Presence.seance_id == seance_id, Presence.seeker_id == current_seeker.id)
