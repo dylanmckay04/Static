@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { departSeance, dissolveSeance, enterSeance, getMyPresence, getWhispers, listPresences } from '../api/seances'
+import { departSeance, dissolveSeance, enterSeance, getMyPresence, getSeance, getWhispers, listPresences } from '../api/seances'
 import type { OwnPresenceResponse, PresenceResponse, WhisperResponse } from '../api/types'
 import type { WsMessage } from '../api/types'
 import { useSeanceSocket } from '../lib/useSeanceSocket'
@@ -82,7 +82,17 @@ export default function RoomPage() {
           own = await enterSeance(seanceId, token)
         } catch (err) {
           if (err instanceof ApiError && err.status === 409) {
-            own = await getMyPresence(seanceId, token)
+            // Already present (e.g., warden, or page refresh) — recover existing presence
+            try {
+              own = await getMyPresence(seanceId, token)
+            } catch (getErr) {
+              if (getErr instanceof ApiError && getErr.status === 404) {
+                // Shouldn't happen (409 means we're present), but fallback to trying enter again
+                own = await enterSeance(seanceId, token)
+              } else {
+                throw getErr
+              }
+            }
           } else if (err instanceof ApiError && err.status === 401) {
             clearToken(); return
           } else {
@@ -95,13 +105,16 @@ export default function RoomPage() {
 
         // 2. Parallel: seance details (just for name) + presence list
         const [, presenceList] = await Promise.all([
-          // We already have the seance_id — we'd need /seances/{id} for the name.
-          // Fetch it; store only name to avoid a dedicated state type.
-          fetch(`http://localhost:8000/seances/${seanceId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }).then(r => r.json()).then((d: { name: string }) => {
-            if (!cancelled) setSeanceName(d.name)
-          }),
+          // Fetch seance details for the name
+          (async () => {
+            try {
+              const details = await getSeance(seanceId, token)
+              if (!cancelled && details.name) setSeanceName(details.name)
+            } catch (err) {
+              console.warn('Could not fetch seance details:', err)
+              // Non-critical; continue anyway
+            }
+          })(),
           listPresences(seanceId, token),
         ])
         if (cancelled) return
@@ -118,6 +131,7 @@ export default function RoomPage() {
         setWsReady(true)
       } catch (err) {
         if (!cancelled) {
+          console.error('Error initializing room:', err)
           setPageError(err instanceof ApiError ? err.message : 'Failed to join séance')
           setStatus('error')
         }
