@@ -224,8 +224,8 @@ def transfer_wardenship(
     target_seeker_id: int,
     current_seeker: Seeker,
     db: Session,
-) -> None:
-    """Hand warden role to another Presence. Current warden becomes attendant."""
+) -> tuple[str, str]:
+    """Hand warden role to another Presence. Returns (old_warden_sigil, new_warden_sigil)."""
     seance = _get_seance_or_404(seance_id, db)
     warden_presence = _require_warden(seance, current_seeker.id, db)
 
@@ -242,6 +242,7 @@ def transfer_wardenship(
     # Update the seance's created_by so subsequent warden checks still work.
     seance.created_by = target_seeker_id
     db.commit()
+    return warden_presence.sigil, target_presence.sigil
 
 
 def set_presence_role(
@@ -313,8 +314,8 @@ def transfer_wardenship_by_sigil(
     target_sigil: str,
     current_seeker: Seeker,
     db: Session,
-) -> None:
-    """Transfer wardenship to the Presence with the given sigil."""
+) -> tuple[str, str]:
+    """Transfer wardenship to the Presence with the given sigil. Returns (old_warden_sigil, new_warden_sigil)."""
     seance = _get_seance_or_404(seance_id, db)
     warden_presence = _require_warden(seance, current_seeker.id, db)
 
@@ -334,6 +335,7 @@ def transfer_wardenship_by_sigil(
     target.role = PresenceRole.warden
     seance.created_by = target.seeker_id
     db.commit()
+    return warden_presence.sigil, target.sigil
 
 
 def set_role_by_sigil(

@@ -180,6 +180,14 @@ export default function RoomPage() {
             : w
         ))
         break
+      case 'promote':
+        setPresences(prev => prev.map(p =>
+          p.sigil === msg.sigil ? { ...p, role: msg.role } : p
+        ))
+        setMyPresence(prev =>
+          prev?.sigil === msg.sigil ? { ...prev, role: msg.role } : prev
+        )
+        break
       case 'dissolve':
         toast('The séance has been dissolved.', 'danger')
         setTimeout(() => navigate('/lobby'), 1200)
@@ -284,12 +292,13 @@ export default function RoomPage() {
     if (!confirm(`Transfer wardenship to ${sigil}?`)) return
     try {
       await transferWardenshipBySigil(seanceId, sigil, token)
-      // Refresh presences to reflect the new roles
-      const updated = await listPresences(seanceId, token)
-      setPresences(updated)
-      // Update our own presence role
-      const ownUpdated = updated.find(p => p.sigil === myPresence?.sigil)
-      if (ownUpdated) setMyPresence(prev => prev ? { ...prev, role: ownUpdated.role } : prev)
+      // Optimistic update — WS promote events confirm for all other clients
+      setPresences(prev => prev.map(p =>
+        p.sigil === sigil             ? { ...p, role: 'warden'    } :
+        p.sigil === myPresence?.sigil ? { ...p, role: 'attendant' } :
+        p
+      ))
+      setMyPresence(prev => prev ? { ...prev, role: 'attendant' } : prev)
       toast('Wardenship transferred.', 'accent')
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Transfer failed.', 'danger')

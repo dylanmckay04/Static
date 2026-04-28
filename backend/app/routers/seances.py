@@ -105,7 +105,9 @@ async def transfer_wardenship(
     current_seeker: Seeker = Depends(get_current_seeker),
 ):
     """Warden: hand warden role to another present Seeker."""
-    seance_service.transfer_wardenship(seance_id, target_seeker_id, current_seeker, db)
+    old_sigil, new_sigil = seance_service.transfer_wardenship(seance_id, target_seeker_id, current_seeker, db)
+    await hub.broadcast(seance_id, {"op": "promote", "sigil": old_sigil, "role": "attendant"})
+    await hub.broadcast(seance_id, {"op": "promote", "sigil": new_sigil, "role": "warden"})
 
 
 @router.patch("/{seance_id}/presences/{target_seeker_id}/role", response_model=PresenceResponse)
@@ -117,7 +119,9 @@ async def set_presence_role(
     current_seeker: Seeker = Depends(get_current_seeker),
 ):
     """Warden: promote an attendant to moderator, or demote a moderator back."""
-    return seance_service.set_presence_role(seance_id, target_seeker_id, role, current_seeker, db)
+    presence = seance_service.set_presence_role(seance_id, target_seeker_id, role, current_seeker, db)
+    await hub.broadcast(seance_id, {"op": "promote", "sigil": presence.sigil, "role": presence.role.value})
+    return presence
 
 
 # ── Sigil-based warden controls (frontend-friendly — no seeker_id needed) ──
@@ -143,7 +147,9 @@ async def transfer_wardenship_by_sigil(
     current_seeker: Seeker = Depends(get_current_seeker),
 ):
     """Warden: hand warden role to the Presence with the given sigil."""
-    seance_service.transfer_wardenship_by_sigil(seance_id, target_sigil, current_seeker, db)
+    old_sigil, new_sigil = seance_service.transfer_wardenship_by_sigil(seance_id, target_sigil, current_seeker, db)
+    await hub.broadcast(seance_id, {"op": "promote", "sigil": old_sigil, "role": "attendant"})
+    await hub.broadcast(seance_id, {"op": "promote", "sigil": new_sigil, "role": "warden"})
 
 
 @router.patch("/{seance_id}/presences/sigil/{sigil}/role", response_model=PresenceResponse)
@@ -155,4 +161,6 @@ async def set_role_by_sigil(
     current_seeker: Seeker = Depends(get_current_seeker),
 ):
     """Warden: promote/demote a Presence identified by sigil."""
-    return seance_service.set_role_by_sigil(seance_id, sigil, role, current_seeker, db)
+    presence = seance_service.set_role_by_sigil(seance_id, sigil, role, current_seeker, db)
+    await hub.broadcast(seance_id, {"op": "promote", "sigil": presence.sigil, "role": presence.role.value})
+    return presence

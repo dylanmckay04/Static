@@ -61,4 +61,5 @@ export type WsMessage =
   | { op: 'depart';  sigil: string }
   | { op: 'dissolve' }
   | { op: 'redact';  whisper_id: number }
+  | { op: 'promote'; sigil: string; role: PresenceRole }
   | { op: 'error';   detail: string }
