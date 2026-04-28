@@ -600,10 +600,8 @@ body::after {
   color: var(--muted);
   font-size: 11px;
   cursor: pointer;
-  opacity: 0;
   padding: 0 4px;
-  transition: color 0.15s, opacity 0.15s;
+  transition: color 0.15s;
   line-height: 1;
 }
-.whisper-row:hover .redact-btn { opacity: 1 }
 .redact-btn:hover { color: var(--error) }
