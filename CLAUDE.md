@@ -60,6 +60,32 @@ core/         Cross-cutting: config, security (JWT/bcrypt), sigil generator, rat
 - `access` token (24h, JWT) — used for all HTTP endpoints via `HTTPBearer` in `core/dependencies.py`
 - `socket` token (60s, JWT, one-time-use) — minted via `POST /auth/socket-token`, JTI stored in Redis so the WebSocket endpoint can consume it atomically
 
+**WebSocket event protocol:** Endpoint is `GET /ws/seances/{seance_id}?token=<socket_token>`. Before connecting, the client mints a one-shot socket token via `POST /auth/socket-token`. Auth/presence failures arrive as WebSocket close codes (`4001` unauthorised, `4003` forbidden) — not JSON frames. All other unexpected closes trigger exponential-backoff reconnect (500 ms × 2ⁿ, cap 30 s, 8 retries).
+
+*Client → Server:*
+
+| `op` | Fields | Notes |
+|------|--------|-------|
+| `whisper` | `content: string` | 1–4 000 chars after strip; rate-limited (10 burst, 1 token/s per seeker+seance) |
+
+*Server → Client — broadcast to all present (`routers/ws.py`, `routers/seances.py`, `routers/whispers.py`, `routers/invites.py`):*
+
+| `op` | Payload fields | Trigger |
+|------|---------------|---------|
+| `whisper` | `id`, `seance_id`, `sigil`, `content`, `is_deleted`, `created_at` | New whisper posted via WS or `POST /seances/{id}/whispers` |
+| `enter` | `sigil` | Seeker enters via `POST /seances/{id}/enter` or joins via invite (`POST /seances/join`) |
+| `depart` | `sigil` | WS disconnect, `DELETE /seances/{id}/depart`, or warden kick |
+| `dissolve` | — | Warden deletes the seance (`DELETE /seances/{id}`) |
+| `redact` | `whisper_id` | Warden/moderator soft-deletes a whisper (`DELETE /seances/{id}/whispers/{id}`) |
+
+*Server → Client — unicast to sender only:*
+
+| `op` | Fields | Conditions |
+|------|--------|-----------|
+| `error` | `detail: string` | Validation failure, rate limit exceeded, unknown op, or service error |
+
+Note: after a `redact` the matching whisper's `content` becomes `"⸻ withdrawn ⸻"` and `is_deleted` flips to `true` when next fetched — no additional frame is sent. The `WsMessage` TypeScript union in `frontend/src/api/types.ts` is the canonical client-side type reference.
+
 **Identity isolation:** `Seeker.id`/`email` is never exposed inside a Seance. The `sigil` on a `Presence` (and snapshotted onto `Whisper.sigil`) is the only visible identity. Leaving and re-entering a Seance yields a new sigil.
 
 **Sigil generation:** `core/sigils.py` produces one of three patterns ("The {Adj} {Noun}", "{Noun}-and-{Noun}", "{Number} {Noun}s"). Uniqueness within a Seance is enforced by `uq_presence_seance_sigil`; `presence_service.assign_presence()` retries up to 8 times on `IntegrityError`.
