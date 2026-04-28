@@ -9,7 +9,8 @@ html, body, #root { height: 100% }
   --surface-2: #18151b;
   --border:    #2e2833;
   --text:      #e6d9c2;
-  --muted:     #7a6a58;
+  --muted:     #9c8a74;
+  --error:     #cc7070;
   --accent:    #c9a227;
   --accent-dim:#a07d18;
   --accent-bg: rgba(201,162,39,0.10);
@@ -50,7 +51,7 @@ body::after {
   inset: 0;
   pointer-events: none;
   z-index: 9998;
-  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.65) 100%);
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.32) 100%);
 }
 
 /* ── Candle flicker ──────────────────────────────────────────────────────── */
@@ -128,7 +129,7 @@ body::after {
 .btn-danger { background: var(--danger); color: var(--ivory) }
 .btn-sm     { padding: 5px 12px; font-size: 13px }
 
-.error-msg  { color: var(--danger); font-size: 13px; font-style: italic }
+.error-msg  { color: var(--error); font-size: 13px; font-style: italic }
 .muted-text { color: var(--muted); font-size: 13px }
 
 /* ── Auth pages ──────────────────────────────────────────────────────────── */
@@ -294,7 +295,7 @@ body::after {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.badge-sealed { background: rgba(139,46,46,0.2); color: #b85c5c }
+.badge-sealed { background: rgba(139,46,46,0.2); color: var(--error) }
 .badge-open   { background: rgba(74,124,89,0.18); color: #6aab7c }
 .badge-count  { background: var(--accent-bg); color: var(--accent) }
 .empty-state {
@@ -349,7 +350,7 @@ body::after {
 .ws-status.connected    { background: rgba(74,124,89,0.18);  color: #6aab7c }
 .ws-status.connecting   { background: var(--accent-bg);       color: var(--accent) }
 .ws-status.reconnecting { background: rgba(180,130,40,0.16);  color: #c9943a }
-.ws-status.dead         { background: rgba(139,46,46,0.20);   color: #b85c5c }
+.ws-status.dead         { background: rgba(139,46,46,0.20);   color: var(--error) }
 
 .room-body {
   flex: 1;
@@ -574,7 +575,7 @@ body::after {
   animation: toastIn 0.3s ease both;
   white-space: nowrap;
 }
-.toast.danger  { border-color: var(--danger); color: #b85c5c }
+.toast.danger  { border-color: var(--danger); color: var(--error) }
 .toast.success { border-color: #4a7c59; color: #6aab7c }
 .toast.accent  { border-color: var(--accent-dim); color: var(--accent) }
 .toast.exiting { animation: toastOut 0.4s ease forwards }
@@ -605,4 +606,4 @@ body::after {
   line-height: 1;
 }
 .whisper-row:hover .redact-btn { opacity: 1 }
-.redact-btn:hover { color: var(--danger) }
+.redact-btn:hover { color: var(--error) }
