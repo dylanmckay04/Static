@@ -120,14 +120,14 @@ def get_seance(seance_id: int, current_seeker: Seeker, db: Session) -> SeanceDet
 def enter_seance(seance_id: int, current_seeker: Seeker, db: Session) -> Presence:
     seance = _get_seance_or_404(seance_id, db)
 
+    if _get_presence(seance_id, current_seeker.id, db):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="You already walk this seance. Depart before re-entering.")
     if seance.is_sealed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This seance is sealed. You must be invited to enter.",
         )
-    if _get_presence(seance_id, current_seeker.id, db):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                            detail="You already walk this seance. Depart before re-entering.")
 
     presence = assign_presence(seeker_id=current_seeker.id, seance_id=seance_id,
                                role=PresenceRole.attendant, db=db)
