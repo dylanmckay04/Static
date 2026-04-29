@@ -11,16 +11,16 @@ html, body, #root { height: 100% }
   --text:      #e6d9c2;
   --muted:     #9c8a74;
   --error:     #cc7070;
-  --accent:    #c9a227;
-  --accent-dim:#a07d18;
-  --accent-bg: rgba(201,162,39,0.10);
+  --accent:    #ffb000;
+  --accent-dim:#cc8800;
+  --accent-bg: rgba(255,176,0,0.10);
   --danger:    #8b2e2e;
   --success:   #4a7c59;
   --ivory:     #f0e6cc;
   --radius:    4px;
-  --font-body: 'EB Garamond', 'Cormorant', Georgia, serif;
-  --font-head: 'UnifrakturCook', 'EB Garamond', serif;
-  --font-mono: 'Special Elite', 'Courier New', monospace;
+  --font-body: 'Share Tech Mono', 'IBM Plex Mono', monospace;
+  --font-head: 'VT323', 'Share Tech Mono', monospace;
+  --font-mono: 'Share Tech Mono', 'Courier New', monospace;
 }
 
 body {
@@ -54,18 +54,18 @@ body::after {
   background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.32) 100%);
 }
 
-/* ── Candle flicker ──────────────────────────────────────────────────────── */
-@keyframes flicker {
-  0%,100% { opacity: 1;    text-shadow: 0 0 8px rgba(201,162,39,0.6) }
-  20%      { opacity: 0.94; text-shadow: 0 0 14px rgba(201,162,39,0.8) }
-  40%      { opacity: 1;    text-shadow: 0 0 6px rgba(201,162,39,0.5) }
-  60%      { opacity: 0.97; text-shadow: 0 0 18px rgba(201,162,39,0.9) }
-  80%      { opacity: 0.93; text-shadow: 0 0 10px rgba(201,162,39,0.7) }
+/* ── Scanline pulse ──────────────────────────────────────────────────────── */
+@keyframes scanline {
+  0%,100% { opacity: 1;    text-shadow: 0 0 8px rgba(255,176,0,0.6) }
+  20%      { opacity: 0.94; text-shadow: 0 0 14px rgba(255,176,0,0.8) }
+  40%      { opacity: 1;    text-shadow: 0 0 6px rgba(255,176,0,0.5) }
+  60%      { opacity: 0.97; text-shadow: 0 0 18px rgba(255,176,0,0.9) }
+  80%      { opacity: 0.93; text-shadow: 0 0 10px rgba(255,176,0,0.7) }
 }
-@keyframes flicker-border {
-  0%,100% { border-color: var(--accent); box-shadow: 0 0 6px rgba(201,162,39,0.25) }
-  35%     { border-color: var(--accent-dim); box-shadow: 0 0 2px rgba(201,162,39,0.1) }
-  70%     { border-color: var(--accent); box-shadow: 0 0 12px rgba(201,162,39,0.4) }
+@keyframes scanline-border {
+  0%,100% { border-color: var(--accent); box-shadow: 0 0 6px rgba(255,176,0,0.25) }
+  35%     { border-color: var(--accent-dim); box-shadow: 0 0 2px rgba(255,176,0,0.1) }
+  70%     { border-color: var(--accent); box-shadow: 0 0 12px rgba(255,176,0,0.4) }
 }
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(6px) }
@@ -73,7 +73,7 @@ body::after {
 }
 @keyframes spin { to { transform: rotate(360deg) } }
 
-.flicker { animation: flicker 4s ease-in-out infinite }
+.scanline { animation: scanline 4s ease-in-out infinite }
 
 /* ── Shared primitives ───────────────────────────────────────────────────── */
 .input {
@@ -90,7 +90,7 @@ body::after {
 }
 .input:focus {
   border-color: var(--accent-dim);
-  box-shadow: 0 0 8px rgba(201,162,39,0.2);
+  box-shadow: 0 0 8px rgba(255,176,0,0.2);
 }
 .input::placeholder { color: var(--muted); font-style: italic }
 
@@ -118,7 +118,7 @@ body::after {
   font-weight: 600;
 }
 .btn-primary:not(:disabled):hover {
-  box-shadow: 0 0 14px rgba(201,162,39,0.45);
+  box-shadow: 0 0 14px rgba(255,176,0,0.45);
 }
 .btn-ghost {
   background: transparent;
@@ -147,7 +147,7 @@ body::after {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 44px 40px;
-  animation: flicker-border 6s ease-in-out infinite;
+  animation: scanline-border 6s ease-in-out infinite;
 }
 .auth-title {
   font-family: var(--font-head);
@@ -157,7 +157,7 @@ body::after {
   text-align: center;
   line-height: 1;
   margin-bottom: 4px;
-  animation: flicker 5s ease-in-out infinite;
+  animation: scanline 5s ease-in-out infinite;
 }
 .auth-subtitle {
   color: var(--muted);
@@ -202,7 +202,7 @@ body::after {
   font-weight: 700;
   color: var(--accent);
   line-height: 1;
-  animation: flicker 5s ease-in-out infinite;
+  animation: scanline 5s ease-in-out infinite;
 }
 .lobby-body {
   flex: 1;
@@ -249,12 +249,12 @@ body::after {
   font-size: 13px;
   font-style: italic;
 }
-.seance-grid {
+.channel-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 16px;
 }
-.seance-card {
+.channel-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -266,12 +266,12 @@ body::after {
   gap: 8px;
   animation: fadeUp 0.3s ease both;
 }
-.seance-card:hover {
+.channel-card:hover {
   border-color: var(--accent-dim);
   background: var(--surface-2);
-  box-shadow: 0 0 16px rgba(201,162,39,0.12);
+  box-shadow: 0 0 16px rgba(255,176,0,0.12);
 }
-.seance-card-name {
+.channel-card-name {
   font-family: var(--font-body);
   font-size: 16px;
   font-weight: 600;
@@ -279,8 +279,8 @@ body::after {
   align-items: center;
   gap: 10px;
 }
-.seance-card-desc { color: var(--muted); font-size: 13px; font-style: italic }
-.seance-card-footer {
+.channel-card-desc {color: var(--muted); font-size: 13px; font-style: italic }
+.channel-card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -294,7 +294,7 @@ body::after {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.badge-sealed { background: rgba(139,46,46,0.2); color: var(--error) }
+.badge-encrypted { background: rgba(139,46,46,0.2); color: var(--error) }
 .badge-open   { background: rgba(74,124,89,0.18); color: #6aab7c }
 .badge-count  { background: var(--accent-bg); color: var(--accent) }
 .empty-state {
@@ -504,7 +504,7 @@ body::after {
 }
 .composer-input:focus {
   border-color: var(--accent-dim);
-  box-shadow: 0 0 8px rgba(201,162,39,0.15);
+  box-shadow: 0 0 8px rgba(255,176,0,0.15);
 }
 .composer-input::placeholder { color: var(--muted); font-style: italic; font-family: var(--font-body) }
 .composer-input:disabled { opacity: 0.4 }

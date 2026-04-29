@@ -19,15 +19,15 @@ export default function LoginPage() {
     try {
       const { access_token } = await login({ email, password })
       setToken(access_token)
-      const pending = sessionStorage.getItem('pendingInviteToken')
+      const pending = sessionStorage.getItem('pendingCipherKey')
       if (pending) {
-        sessionStorage.removeItem('pendingInviteToken')
+        sessionStorage.removeItem('pendingCipherKey')
         navigate(`/invite?token=${encodeURIComponent(pending)}`, { replace: true })
       } else {
         navigate('/lobby', { replace: true })
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The veil refused you.')
+      setError(err instanceof ApiError ? err.message : 'Access denied. Check your credentials.')
     } finally {
       setLoading(false)
     }
@@ -36,8 +36,8 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1 className="auth-title flicker">Veil</h1>
-        <p className="auth-subtitle">Step through the veil</p>
+        <h1 className="auth-title scanline">Static</h1>
+        <p className="auth-subtitle">Tune in to the frequency</p>
         <form onSubmit={handleSubmit} className="auth-form">
           <input
             className="input" type="email" placeholder="Your address"
@@ -51,11 +51,11 @@ export default function LoginPage() {
           />
           {error && <p className="error-msg">{error}</p>}
           <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? 'Parting the veil…' : 'Enter'}
+            {loading ? 'Authenticating…' : 'Enter'}
           </button>
         </form>
         <p className="auth-link">
-          No account? <Link to="/register">Inscribe your name</Link>
+          No account? <Link to="/register">Register</Link>
         </p>
       </div>
     </div>

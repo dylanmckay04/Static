@@ -1,65 +1,65 @@
 // ── Auth ──────────────────────────────────────────────────────────────────────
-export interface SeekerCreate    { email: string; password: string }
-export interface SeekerResponse  { id: number; email: string; created_at: string }
+export interface OperatorCreate    { email: string; password: string }
+export interface OperatorResponse  { id: number; email: string; created_at: string }
 export interface LoginRequest    { email: string; password: string }
 export interface TokenResponse   { access_token: string; token_type: string }
 export interface SocketTokenResponse { socket_token: string; jti: string }
 
-// ── Seances ───────────────────────────────────────────────────────────────────
-export interface SeanceCreate {
+// ── Channels ──────────────────────────────────────────────────────────────────
+export interface ChannelCreate {
   name: string
   description?: string
-  is_sealed?: boolean
-  whisper_ttl_seconds?: number | null
+  is_encrypted?: boolean
+  transmission_ttl_seconds?: number | null
 }
-export interface SeanceResponse {
+export interface ChannelResponse {
   id: number
   name: string
   description: string | null
-  is_sealed: boolean
-  whisper_ttl_seconds: number | null
+  is_encrypted: boolean
+  transmission_ttl_seconds: number | null
   created_at: string
 }
-export interface SeanceDetail extends SeanceResponse {
-  presence_count: number
+export interface ChannelDetail extends ChannelResponse {
+  contact_count: number
 }
-export interface InviteResponse {
-  invite_id: number
+export interface CipherKeyResponse {
+  cipher_key_id: number
   token: string
   expires_at: string
 }
 
-// ── Presences ─────────────────────────────────────────────────────────────────
-export type PresenceRole = 'warden' | 'moderator' | 'attendant'
-export interface PresenceResponse {
-  sigil: string
-  role: PresenceRole
+// ── Contacts ──────────────────────────────────────────────────────────────────
+export type ContactRole = 'controller' | 'relay' | 'listener'
+export interface ContactResponse {
+  callsign: string
+  role: ContactRole
   entered_at: string
 }
-export interface OwnPresenceResponse extends PresenceResponse {
-  seance_id: number
+export interface OwnContactResponse extends ContactResponse {
+  channel_id: number
 }
 
-// ── Whispers ──────────────────────────────────────────────────────────────────
-export interface WhisperResponse {
+// ── Transmissions ─────────────────────────────────────────────────────────────
+export interface TransmissionResponse {
   id: number
-  seance_id: number
-  sigil: string
+  channel_id: number
+  callsign: string
   content: string
   is_deleted: boolean
   created_at: string
 }
-export interface WhisperPage {
-  items: WhisperResponse[]
+export interface TransmissionPage {
+  items: TransmissionResponse[]
   next_before_id: number | null
 }
 
 // ── WebSocket frames ──────────────────────────────────────────────────────────
 export type WsMessage =
-  | { op: 'whisper'; id: number; seance_id: number; sigil: string; content: string; is_deleted: boolean; created_at: string }
-  | { op: 'enter';   sigil: string }
-  | { op: 'depart';  sigil: string }
+  | { op: 'transmission'; id: number; channel_id: number; callsign: string; content: string; is_deleted: boolean; created_at: string }
+  | { op: 'enter';   callsign: string }
+  | { op: 'depart';  callsign: string }
   | { op: 'dissolve' }
-  | { op: 'redact';  whisper_id: number }
-  | { op: 'promote'; sigil: string; role: PresenceRole }
+  | { op: 'redact';  transmission_id: number }
+  | { op: 'promote'; callsign: string; role: ContactRole }
   | { op: 'error';   detail: string }

@@ -8,29 +8,29 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import {
-  createInvite,
-  departSeance,
-  dissolveSeance,
-  enterSeance,
-  getMyPresence,
-  getWhispers,
-  kickBySigil,
-  listPresences,
-  redactWhisper,
-  setRoleBySigil,
-  transferWardenshipBySigil,
-} from '../api/seances'
-import type { OwnPresenceResponse, PresenceResponse, PresenceRole, WhisperResponse, WsMessage } from '../api/types'
-import { sigilSvgHtml } from '../lib/sigil'
+  createCipherKey,
+  departChannel,
+  dissolveChannel,
+  enterChannel,
+  getMyContact,
+  getTransmissions,
+  kickByCallsign,
+  listContacts,
+  redactTransmission,
+  setRoleByCallsign,
+  transferControllerByCallsign,
+} from '../api/channels'
+import type { OwnContactResponse, ContactResponse, ContactRole, TransmissionResponse, WsMessage } from '../api/types'
+import { callsignSvgHtml } from '../lib/callsign'
 import {
   playConnectionDrop,
-  playMessageSent,
+  playTransmissionSent,
   playReconnected,
-  playWhisperReceived,
+  playTransmissionReceived,
   setEnabled as setSoundEnabled,
 } from '../lib/sounds'
 import { useToast } from '../components/Toast'
-import { useSeanceSocket } from '../lib/useSeanceSocket'
+import { useChannelSocket } from '../lib/useChannelSocket'
 import { useAuth } from '../store/auth'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -43,17 +43,17 @@ function formatTime(iso: string) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + timeStr
 }
 
-function mergeWhispers(a: WhisperResponse[], b: WhisperResponse[]): WhisperResponse[] {
-  const map = new Map<number, WhisperResponse>()
+function mergeTransmissions(a: TransmissionResponse[], b: TransmissionResponse[]): TransmissionResponse[] {
+  const map = new Map<number, TransmissionResponse>()
   for (const w of [...a, ...b]) map.set(w.id, w)
   return Array.from(map.values()).sort((x, y) => x.id - y.id)
 }
 
-function SigilSeal({ sigil, size = 28 }: { sigil: string; size?: number }) {
+function CallsignSeal({ callsign, size = 28 }: { callsign: string; size?: number }) {
   return (
     <span
-      className="presence-sigil-seal"
-      dangerouslySetInnerHTML={{ __html: sigilSvgHtml(sigil, size) }}
+      className="contact-callsign-seal"
+      dangerouslySetInnerHTML={{ __html: callsignSvgHtml(callsign, size) }}
     />
   )
 }
@@ -64,17 +64,17 @@ type PageStatus = 'loading' | 'ready' | 'error'
 
 export default function RoomPage() {
   const { id }      = useParams<{ id: string }>()
-  const seanceId    = Number(id)
+  const channelId    = Number(id)
   const { token, clearToken } = useAuth()
   const navigate    = useNavigate()
   const toast       = useToast()
 
   const [status,      setStatus]      = useState<PageStatus>('loading')
   const [pageError,   setPageError]   = useState<string | null>(null)
-  const [seanceName,  setSeanceName]  = useState('')
-  const [myPresence,  setMyPresence]  = useState<OwnPresenceResponse | null>(null)
-  const [presences,   setPresences]   = useState<PresenceResponse[]>([])
-  const [whispers,    setWhispers]    = useState<WhisperResponse[]>([])
+  const [channelName,  setChannelName]  = useState('')
+  const [myContact,   setMyContact]   = useState<OwnContactResponse | null>(null)
+  const [contacts,    setContacts]    = useState<ContactResponse[]>([])
+  const [transmissions,    setTransmissions]    = useState<TransmissionResponse[]>([])
   const [nextBefore,  setNextBefore]  = useState<number | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [draft,       setDraft]       = useState('')
@@ -97,12 +97,12 @@ export default function RoomPage() {
 
     const init = async () => {
       try {
-        let own: OwnPresenceResponse
+        let own: OwnContactResponse
         try {
-          own = await enterSeance(seanceId, token)
+          own = await enterChannel(channelId, token)
         } catch (err) {
           if (err instanceof ApiError && err.status === 409) {
-            own = await getMyPresence(seanceId, token)
+            own = await getMyContact(channelId, token)
           } else if (err instanceof ApiError && err.status === 401) {
             clearToken(); return
           } else {
@@ -110,29 +110,29 @@ export default function RoomPage() {
           }
         }
         if (cancelled) return
-        setMyPresence(own)
+        setMyContact(own)
 
-        const [, presenceList] = await Promise.all([
-          fetch(`http://localhost:8000/seances/${seanceId}`, {
+        const [, contactList] = await Promise.all([
+          fetch(`http://localhost:8000/channels/${channelId}`, {
             headers: { Authorization: `Bearer ${token}` },
           }).then(r => r.json()).then((d: { name: string }) => {
-            if (!cancelled) setSeanceName(d.name)
+            if (!cancelled) setChannelName(d.name)
           }),
-          listPresences(seanceId, token),
+          listContacts(channelId, token),
         ])
         if (cancelled) return
-        setPresences(presenceList)
+        setContacts(contactList)
 
-        const page = await getWhispers(seanceId, { limit: 50 }, token)
+        const page = await getTransmissions(channelId, { limit: 50 }, token)
         if (cancelled) return
-        setWhispers([...page.items].reverse())
+        setTransmissions([...page.items].reverse())
         setNextBefore(page.next_before_id)
 
         setStatus('ready')
         setWsReady(true)
       } catch (err) {
         if (!cancelled) {
-          setPageError(err instanceof ApiError ? err.message : 'The séance could not be entered.')
+          setPageError(err instanceof ApiError ? err.message : 'The channel could not be entered.')
           setStatus('error')
         }
       }
@@ -140,56 +140,56 @@ export default function RoomPage() {
 
     void init()
     return () => { cancelled = true }
-  }, [seanceId, token, clearToken])
+  }, [channelId, token, clearToken])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [whispers.length])
+  }, [transmissions.length])
 
   // ── WS message handler ────────────────────────────────────────────────────
 
   const handleWsMessage = useCallback((msg: WsMessage) => {
     switch (msg.op) {
-      case 'whisper': {
-        const w: WhisperResponse = {
-          id: msg.id, seance_id: msg.seance_id,
-          sigil: msg.sigil, content: msg.content,
+      case 'transmission': {
+        const w: TransmissionResponse = {
+          id: msg.id, channel_id: msg.channel_id,
+          callsign: msg.callsign, content: msg.content,
           is_deleted: msg.is_deleted ?? false,
           created_at: msg.created_at,
         }
-        setWhispers(prev => mergeWhispers(prev, [w]))
-        setMyPresence(me => {
-          if (me && msg.sigil !== me.sigil) playWhisperReceived()
+        setTransmissions(prev => mergeTransmissions(prev, [w]))
+        setMyContact(me => {
+          if (me && msg.callsign !== me.callsign) playTransmissionReceived()
           return me
         })
         break
       }
       case 'enter':
-        setPresences(prev => {
-          if (prev.some(p => p.sigil === msg.sigil)) return prev
-          return [...prev, { sigil: msg.sigil, role: 'attendant', entered_at: new Date().toISOString() }]
+        setContacts(prev => {
+          if (prev.some(p => p.callsign === msg.callsign)) return prev
+          return [...prev, { callsign: msg.callsign, role: 'listener', entered_at: new Date().toISOString() }]
         })
         break
       case 'depart':
-        setPresences(prev => prev.filter(p => p.sigil !== msg.sigil))
+        setContacts(prev => prev.filter(p => p.callsign !== msg.callsign))
         break
       case 'redact':
-        setWhispers(prev => prev.map(w =>
-          w.id === msg.whisper_id
-            ? { ...w, is_deleted: true, content: '⸻ withdrawn ⸻' }
+        setTransmissions(prev => prev.map(w =>
+          w.id === msg.transmission_id
+            ? { ...w, is_deleted: true, content: '⸻ redacted ⸻' }
             : w
         ))
         break
       case 'promote':
-        setPresences(prev => prev.map(p =>
-          p.sigil === msg.sigil ? { ...p, role: msg.role } : p
+        setContacts(prev => prev.map(p =>
+          p.callsign === msg.callsign ? { ...p, role: msg.role } : p
         ))
-        setMyPresence(prev =>
-          prev?.sigil === msg.sigil ? { ...prev, role: msg.role } : prev
+        setMyContact(prev =>
+          prev?.callsign === msg.callsign ? { ...prev, role: msg.role } : prev
         )
         break
       case 'dissolve':
-        toast('The séance has been dissolved.', 'danger')
+        toast('The channel has been dissolved.', 'danger')
         setTimeout(() => navigate('/lobby'), 1200)
         break
     }
@@ -200,17 +200,17 @@ export default function RoomPage() {
   const handleReconnect = useCallback(async (lastSeenId: number) => {
     if (!token) return
     try {
-      const page = await getWhispers(seanceId, { limit: 50 }, token)
+      const page = await getTransmissions(channelId, { limit: 50 }, token)
       if (!mountedRef.current) return
       const missed = page.items.filter(w => w.id > lastSeenId).reverse()
-      if (missed.length > 0) setWhispers(prev => mergeWhispers(prev, missed))
+      if (missed.length > 0) setTransmissions(prev => mergeTransmissions(prev, missed))
     } catch { /* ignore */ }
-  }, [seanceId, token])
+  }, [channelId, token])
 
   // ── Socket ────────────────────────────────────────────────────────────────
 
-  const { wsStatus, sendWhisper, setLastSeen } = useSeanceSocket({
-    seanceId, token: token ?? '', enabled: wsReady,
+  const { wsStatus, sendWhisper, setLastSeen } = useChannelSocket({
+    channelId, token: token ?? '', enabled: wsReady,
     onMessage: handleWsMessage, onReconnect: handleReconnect,
   })
 
@@ -219,7 +219,7 @@ export default function RoomPage() {
     prevWsStatus.current = wsStatus
     if (prev === wsStatus || prev === '') return
     if (wsStatus === 'reconnecting') {
-      toast('The veil shudders… seeking the other side.', 'danger')
+      toast('Signal lost. Reconnecting…', 'danger')
       playConnectionDrop()
     } else if (wsStatus === 'connected' && prev === 'reconnecting') {
       toast('The channel is open once more.', 'success')
@@ -230,8 +230,8 @@ export default function RoomPage() {
   }, [wsStatus, toast])
 
   useEffect(() => {
-    if (whispers.length > 0) setLastSeen(whispers[whispers.length - 1].id)
-  }, [whispers, setLastSeen])
+    if (transmissions.length > 0) setLastSeen(transmissions[transmissions.length - 1].id)
+  }, [transmissions, setLastSeen])
 
   // ── Load older ────────────────────────────────────────────────────────────
 
@@ -239,8 +239,8 @@ export default function RoomPage() {
     if (!token || !nextBefore || loadingMore) return
     setLoadingMore(true)
     try {
-      const page = await getWhispers(seanceId, { limit: 50, before_id: nextBefore }, token)
-      setWhispers(prev => mergeWhispers([...page.items].reverse(), prev))
+      const page = await getTransmissions(channelId, { limit: 50, before_id: nextBefore }, token)
+      setTransmissions(prev => mergeTransmissions([...page.items].reverse(), prev))
       setNextBefore(page.next_before_id)
     } catch { /* ignore */ } finally { setLoadingMore(false) }
   }
@@ -251,7 +251,7 @@ export default function RoomPage() {
     const content = draft.trim()
     if (!content || wsStatus !== 'connected') return
     sendWhisper(content)
-    playMessageSent()
+    playTransmissionSent()
     setDraft('')
     textareaRef.current?.focus()
   }
@@ -266,61 +266,59 @@ export default function RoomPage() {
     const next = !soundOn
     setSoundOn(next)
     setSoundEnabled(next)
-    toast(next ? 'The candles are lit.' : 'Silence descends.', 'accent')
+    toast(next ? 'Signal active.' : 'Signal muted.', 'accent')
   }
 
-  // ── Moderation (all sigil-based — no seeker_id needed) ───────────────────
+  // ── Moderation (all callsign-based — no operator_id needed) ──────────────
 
-  const isWarden = myPresence?.role === 'warden'
-  const isMod    = myPresence?.role === 'moderator'
-  const canMod   = isWarden || isMod
+  const isController = myContact?.role === 'controller'
+  const isRelay      = myContact?.role === 'relay'
+  const canMod       = isController || isRelay
 
-  const handleKick = async (sigil: string) => {
+  const handleKick = async (callsign: string) => {
     if (!token || !canMod) return
     try {
-      await kickBySigil(seanceId, sigil, token)
-      // WS depart broadcast will remove them from state; do it optimistically too
-      setPresences(prev => prev.filter(p => p.sigil !== sigil))
-      toast(`${sigil} has been removed.`, 'accent')
+      await kickByCallsign(channelId, callsign, token)
+      setContacts(prev => prev.filter(p => p.callsign !== callsign))
+      toast(`${callsign} has been removed.`, 'accent')
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Kick failed.', 'danger')
     }
   }
 
-  const handleTransfer = async (sigil: string) => {
-    if (!token || !isWarden) return
-    if (!confirm(`Transfer wardenship to ${sigil}?`)) return
+  const handleTransfer = async (callsign: string) => {
+    if (!token || !isController) return
+    if (!confirm(`Transfer controllership to ${callsign}?`)) return
     try {
-      await transferWardenshipBySigil(seanceId, sigil, token)
-      // Optimistic update — WS promote events confirm for all other clients
-      setPresences(prev => prev.map(p =>
-        p.sigil === sigil             ? { ...p, role: 'warden'    } :
-        p.sigil === myPresence?.sigil ? { ...p, role: 'attendant' } :
+      await transferControllerByCallsign(channelId, callsign, token)
+      setContacts(prev => prev.map(p =>
+        p.callsign === callsign              ? { ...p, role: 'controller' } :
+        p.callsign === myContact?.callsign   ? { ...p, role: 'listener'   } :
         p
       ))
-      setMyPresence(prev => prev ? { ...prev, role: 'attendant' } : prev)
-      toast('Wardenship transferred.', 'accent')
+      setMyContact(prev => prev ? { ...prev, role: 'listener' } : prev)
+      toast('Controllership transferred.', 'accent')
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Transfer failed.', 'danger')
     }
   }
 
-  const handleSetRole = async (sigil: string, role: PresenceRole) => {
-    if (!token || !isWarden) return
+  const handleSetRole = async (callsign: string, role: ContactRole) => {
+    if (!token || !isController) return
     try {
-      await setRoleBySigil(seanceId, sigil, role, token)
-      setPresences(prev => prev.map(p => p.sigil === sigil ? { ...p, role } : p))
+      await setRoleByCallsign(channelId, callsign, role, token)
+      setContacts(prev => prev.map(p => p.callsign === callsign ? { ...p, role } : p))
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Role change failed.', 'danger')
     }
   }
 
-  const handleRedact = async (whisperId: number) => {
+  const handleRedact = async (transmissionId: number) => {
     if (!token || !canMod) return
     try {
-      await redactWhisper(seanceId, whisperId, token)
-      setWhispers(prev => prev.map(w =>
-        w.id === whisperId ? { ...w, is_deleted: true, content: '⸻ withdrawn ⸻' } : w
+      await redactTransmission(channelId, transmissionId, token)
+      setTransmissions(prev => prev.map(w =>
+        w.id === transmissionId ? { ...w, is_deleted: true, content: '⸻ redacted ⸻' } : w
       ))
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Redaction failed.', 'danger')
@@ -328,9 +326,9 @@ export default function RoomPage() {
   }
 
   const handleMintInvite = async () => {
-    if (!token || !isWarden) return
+    if (!token || !isController) return
     try {
-      const inv = await createInvite(seanceId, token)
+      const inv = await createCipherKey(channelId, token)
       const url = `${window.location.origin}/invite?token=${encodeURIComponent(inv.token)}`
       await navigator.clipboard.writeText(url)
       setCopying(true)
@@ -345,14 +343,14 @@ export default function RoomPage() {
 
   const handleDepart = async () => {
     if (!token) return
-    try { await departSeance(seanceId, token) } catch { /* ignore */ }
+    try { await departChannel(channelId, token) } catch { /* ignore */ }
     navigate('/lobby')
   }
 
   const handleDissolve = async () => {
     if (!token) return
-    if (!confirm('Dissolve this séance? The circle cannot be reopened.')) return
-    try { await dissolveSeance(seanceId, token) } catch { /* ignore */ }
+    if (!confirm('Dissolve this channel? This cannot be undone.')) return
+    try { await dissolveChannel(channelId, token) } catch { /* ignore */ }
     navigate('/lobby')
   }
 
@@ -362,7 +360,7 @@ export default function RoomPage() {
     return (
       <div className="center-page">
         <div className="spinner" />
-        <span>Lighting the candles…</span>
+        <span>Tuning in…</span>
       </div>
     )
   }
@@ -379,8 +377,8 @@ export default function RoomPage() {
   }
 
   const composerPlaceholder =
-    wsStatus === 'connected'      ? 'Whisper into the void… (Enter to send, Shift+Enter for newline)'
-    : wsStatus === 'reconnecting' ? 'Seeking the other side…'
+    wsStatus === 'connected'      ? 'Transmit… (Enter to send, Shift+Enter for newline)'
+    : wsStatus === 'reconnecting' ? 'Reconnecting…'
     : 'Contact has been lost'
 
   return (
@@ -388,17 +386,17 @@ export default function RoomPage() {
       {/* Header */}
       <header className="room-header">
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/lobby')}>←</button>
-        <span className="room-header-title">{seanceName}</span>
-        {myPresence && (
-          <span className="room-header-sigil" title="Your sigil this session">{myPresence.sigil}</span>
+        <span className="room-header-title">{channelName}</span>
+        {myContact && (
+          <span className="room-header-callsign" title="Your callsign this session">{myContact.callsign}</span>
         )}
         <span className={`ws-status ${wsStatus}`}>{wsStatus}</span>
         <button
           className={`sound-toggle${soundOn ? ' active' : ''}`}
           onClick={toggleSound}
-          title={soundOn ? 'Silence the candles' : 'Light the candles'}
-        >🕯</button>
-        {isWarden ? (
+          title={soundOn ? 'Mute signal' : 'Enable signal audio'}
+        >📡</button>
+        {isController ? (
           <>
             <button className="btn btn-ghost btn-sm" onClick={handleMintInvite}>
               {copying ? 'Copied!' : 'Invite'}
@@ -412,48 +410,48 @@ export default function RoomPage() {
 
       {/* Body */}
       <div className="room-body">
-        {/* Presence sidebar */}
-        <aside className="presence-sidebar">
-          <div className="presence-sidebar-title">Present</div>
-          <div className="presence-list">
-            {presences.map(p => {
-              const isMe = p.sigil === myPresence?.sigil
-              const canTarget = canMod && !isMe && p.role !== 'warden'
+        {/* Contact sidebar */}
+        <aside className="contact-sidebar">
+          <div className="contact-sidebar-title">Present</div>
+          <div className="contact-list">
+            {contacts.map(p => {
+              const isMe = p.callsign === myContact?.callsign
+              const canTarget = canMod && !isMe && p.role !== 'controller'
               return (
                 <div
-                  key={p.sigil}
-                  className={`presence-item${isMe ? ' is-me' : ''}`}
+                  key={p.callsign}
+                  className={`contact-item${isMe ? ' is-me' : ''}`}
                 >
-                  <SigilSeal sigil={p.sigil} size={22} />
-                  <span className="presence-sigil" title={p.sigil}>{p.sigil}</span>
-                  {p.role === 'warden'    && <span className="presence-role" style={{ color: 'var(--accent)' }}>w</span>}
-                  {p.role === 'moderator' && <span className="presence-role" style={{ color: 'var(--muted)' }}>m</span>}
+                  <CallsignSeal callsign={p.callsign} size={22} />
+                  <span className="contact-callsign" title={p.callsign}>{p.callsign}</span>
+                  {p.role === 'controller' && <span className="contact-role" style={{ color: 'var(--accent)' }}>c</span>}
+                  {p.role === 'relay'      && <span className="contact-role" style={{ color: 'var(--muted)' }}>r</span>}
                   {canTarget && (
-                    <div className="presence-actions">
+                    <div className="contact-actions">
                       <button
-                        className="presence-action-btn"
-                        title="Remove from séance"
-                        onClick={() => handleKick(p.sigil)}
+                        className="contact-action-btn"
+                        title="Remove from channel"
+                        onClick={() => handleKick(p.callsign)}
                       >✕</button>
-                      {isWarden && p.role === 'attendant' && (
+                      {isController && p.role === 'listener' && (
                         <button
-                          className="presence-action-btn"
-                          title="Promote to moderator"
-                          onClick={() => handleSetRole(p.sigil, 'moderator')}
+                          className="contact-action-btn"
+                          title="Promote to relay"
+                          onClick={() => handleSetRole(p.callsign, 'relay')}
                         >↑</button>
                       )}
-                      {isWarden && p.role === 'moderator' && (
+                      {isController && p.role === 'relay' && (
                         <button
-                          className="presence-action-btn"
-                          title="Demote to attendant"
-                          onClick={() => handleSetRole(p.sigil, 'attendant')}
+                          className="contact-action-btn"
+                          title="Demote to listener"
+                          onClick={() => handleSetRole(p.callsign, 'listener')}
                         >↓</button>
                       )}
-                      {isWarden && (
+                      {isController && (
                         <button
-                          className="presence-action-btn"
-                          title="Transfer wardenship"
-                          onClick={() => handleTransfer(p.sigil)}
+                          className="contact-action-btn"
+                          title="Transfer controllership"
+                          onClick={() => handleTransfer(p.callsign)}
                         >⇒</button>
                       )}
                     </div>
@@ -469,40 +467,40 @@ export default function RoomPage() {
           <div className="feed-scroll">
             {nextBefore !== null && (
               <button className="load-more-btn" onClick={loadMore} disabled={loadingMore}>
-                {loadingMore ? 'Reaching further back…' : 'Summon older whispers'}
+                {loadingMore ? 'Loading…' : 'Load older transmissions'}
               </button>
             )}
 
-            {whispers.length === 0 && (
+            {transmissions.length === 0 && (
               <p className="empty-state" style={{ marginTop: 48 }}>
-                The board is silent. Whisper first.
+                No transmissions yet. Send the first.
               </p>
             )}
 
-            {whispers.map(w => (
+            {transmissions.map(t => (
               <div
-                key={w.id}
-                className={`whisper-row${w.sigil === myPresence?.sigil ? ' is-mine' : ''}${w.is_deleted ? ' is-redacted' : ''}`}
+                key={t.id}
+                className={`transmission-row${t.callsign === myContact?.callsign ? ' is-mine' : ''}${t.is_deleted ? ' is-redacted' : ''}`}
               >
-                <div className="whisper-header">
-                  <SigilSeal sigil={w.sigil} size={20} />
+                <div className="transmission-header">
+                  <CallsignSeal callsign={t.callsign} size={20} />
                   <span
-                    className="whisper-sigil"
-                    style={{ color: w.sigil === myPresence?.sigil ? 'var(--accent)' : 'var(--muted)' }}
+                    className="transmission-callsign"
+                    style={{ color: t.callsign === myContact?.callsign ? 'var(--accent)' : 'var(--muted)' }}
                   >
-                    {w.sigil}
+                    {t.callsign}
                   </span>
-                  <span className="whisper-time">{formatTime(w.created_at)}</span>
-                  {canMod && !w.is_deleted && (
+                  <span className="transmission-time">{formatTime(t.created_at)}</span>
+                  {canMod && !t.is_deleted && (
                     <button
                       className="redact-btn"
-                      onClick={() => handleRedact(w.id)}
-                      title="Redact this whisper"
+                      onClick={() => handleRedact(t.id)}
+                      title="Redact this transmission"
                     >✕</button>
                   )}
                 </div>
-                <span className={`whisper-content${w.is_deleted ? ' whisper-withdrawn' : ''}`}>
-                  {w.content}
+                <span className={`transmission-content${t.is_deleted ? ' transmission-redacted' : ''}`}>
+                  {t.content}
                 </span>
               </div>
             ))}

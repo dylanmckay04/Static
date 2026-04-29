@@ -1,5 +1,5 @@
 /**
- * Occult sound engine — Web Audio API synthesis only, no files required.
+ * Numbers station sound engine - Web Audio API synthesis only, no files required.
  * All sounds are off by default; call setEnabled(true) to activate.
  */
 
@@ -15,8 +15,8 @@ function getCtx(): AudioContext {
   return ctx
 }
 
-// ── Candle hum loop ───────────────────────────────────────────────────────
-// A very faint 55 Hz organ-like drone with a slow 0.3 Hz amplitude flutter
+// ── Carrier tone loop ─────────────────────────────────────────────────────
+// A faint 440 Hz sawtooth carrier with a slow 0.3 Hz amplitude flutter
 
 function startHum() {
   if (!enabled || humOsc) return
@@ -28,12 +28,12 @@ function startHum() {
   humGain.connect(c.destination)
 
   humOsc = c.createOscillator()
-  humOsc.type = 'sine'
-  humOsc.frequency.value = 55
+  humOsc.type = 'sawtooth'
+  humOsc.frequency.value = 440
   humOsc.connect(humGain)
   humOsc.start()
 
-  // LFO for flutter
+  // LFO for carrier flutter
   humLfo = c.createOscillator()
   humLfo.type = 'sine'
   humLfo.frequency.value = 0.28
@@ -53,10 +53,10 @@ function stopHum() {
   humOsc = null; humLfo = null; humGain = null
 }
 
-// ── Incoming whisper tone ─────────────────────────────────────────────────
-// Brief filtered noise burst — like a distant voice
+// ── Incoming transmission tone ────────────────────────────────────────────
+// Brief filtered noise burst - shortwave channel noise
 
-export function playWhisperReceived() {
+export function playTransmissionReceived() {
   if (!enabled) return
   const c = getCtx()
 
@@ -70,8 +70,8 @@ export function playWhisperReceived() {
 
   const filter = c.createBiquadFilter()
   filter.type = 'bandpass'
-  filter.frequency.value = 1800
-  filter.Q.value = 2.5
+  filter.frequency.value = 900
+  filter.Q.value = 4.0
 
   const gain = c.createGain()
   gain.gain.setValueAtTime(0.08, c.currentTime)
@@ -83,42 +83,57 @@ export function playWhisperReceived() {
   src.start()
 }
 
-// ── Planchette / send click ───────────────────────────────────────────────
-// Soft low thud
+// ── Morse key click ───────────────────────────────────────────────────────
+// Sharp square-wave transient like a telegraph key press
 
-export function playMessageSent() {
+export function playTransmissionSent() {
   if (!enabled) return
   const c = getCtx()
 
   const osc = c.createOscillator()
-  osc.type = 'sine'
-  osc.frequency.setValueAtTime(160, c.currentTime)
-  osc.frequency.exponentialRampToValueAtTime(60, c.currentTime + 0.12)
+  osc.type = 'square'
+  osc.frequency.setValueAtTime(700, c.currentTime)
+  osc.frequency.exponentialRampToValueAtTime(400, c.currentTime + 0.08)
 
   const gain = c.createGain()
   gain.gain.setValueAtTime(0.18, c.currentTime)
-  gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.15)
+  gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.10)
 
   osc.connect(gain)
   gain.connect(c.destination)
   osc.start()
-  osc.stop(c.currentTime + 0.16)
+  osc.stop(c.currentTime + 0.11)
 }
 
-// ── Connection drop — descending omen ─────────────────────────────────────
+// ── Signal loss ───────────────────────────────────────────────────────────
 
 export function playConnectionDrop() {
   if (!enabled) return
   const c = getCtx()
 
+  // Noise burst prefix
+  const bufSize = c.sampleRate * 0.12
+  const buf = c.createBuffer(1, bufSize, c.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1
+  const noiseSrc = c.createBufferSource()
+  noiseSrc.buffer = buf
+  const noiseGain = c.createGain()
+  noiseGain.gain.setValueAtTime(0.06, c.currentTime)
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.12)
+  noiseSrc.connect(noiseGain)
+  noiseGain.connect(c.destination)
+  noiseSrc.start()
+
+  // Descending sawtooth sweep
   const osc = c.createOscillator()
   osc.type = 'sawtooth'
-  osc.frequency.setValueAtTime(320, c.currentTime)
-  osc.frequency.exponentialRampToValueAtTime(80, c.currentTime + 0.7)
+  osc.frequency.setValueAtTime(320, c.currentTime + 0.1)
+  osc.frequency.exponentialRampToValueAtTime(80, c.currentTime + 0.8)
 
   const gain = c.createGain()
-  gain.gain.setValueAtTime(0.07, c.currentTime)
-  gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.7)
+  gain.gain.setValueAtTime(0.07, c.currentTime + 0.1)
+  gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.8)
 
   const filter = c.createBiquadFilter()
   filter.type = 'lowpass'
@@ -127,31 +142,31 @@ export function playConnectionDrop() {
   osc.connect(filter)
   filter.connect(gain)
   gain.connect(c.destination)
-  osc.start()
-  osc.stop(c.currentTime + 0.75)
+  osc.start(c.currentTime + 0.1)
+  osc.stop(c.currentTime + 0.85)
 }
 
-// ── Reconnected — ascending chime ─────────────────────────────────────────
+// ── Signal acquired ───────────────────────────────────────────────────────
 
 export function playReconnected() {
   if (!enabled) return
   const c = getCtx()
 
-  ;[220, 330, 440].forEach((freq, i) => {
+  ;[400, 600, 800].forEach((freq, i) => {
     const osc = c.createOscillator()
-    osc.type = 'sine'
+    osc.type = 'square'
     osc.frequency.value = freq
 
     const gain = c.createGain()
     const t = c.currentTime + i * 0.12
     gain.gain.setValueAtTime(0, t)
-    gain.gain.linearRampToValueAtTime(0.07, t + 0.05)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35)
+    gain.gain.linearRampToValueAtTime(0.07, t + 0.04)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28)
 
     osc.connect(gain)
     gain.connect(c.destination)
     osc.start(t)
-    osc.stop(t + 0.4)
+    osc.stop(t + 0.32)
   })
 }
 

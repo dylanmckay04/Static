@@ -16,8 +16,8 @@ from slowapi.errors import RateLimitExceeded
 from app.core.limiter import limiter
 from app.database import SessionLocal, engine
 from app.realtime.hub import start_subscriber
-from app.routers import auth, debug, seances, whispers, ws
-from app.routers import invites
+from app.routers import auth, debug, channels, transmissions, ws
+from app.routers import cipher_keys
 
 logger = logging.getLogger(__name__)
 
@@ -41,14 +41,14 @@ if not os.getenv("TESTING"):
     wait_for_db()
 
 
-async def _prune_expired_whispers() -> None:
-    """Background task: soft-delete whispers older than their seance's TTL.
+async def _prune_expired_transmissions() -> None:
+    """Background task: soft-delete transmissions older than their channel's TTL.
 
-    Runs every 60 seconds. Only touches seances with whisper_ttl_seconds set.
+    Runs every 60 seconds. Only touches channels with transmission_ttl_seconds set.
     Each pruning pass is wrapped in its own DB session so failures don't leak.
     """
-    from app.models.seance import Seance
-    from app.models.whisper import Whisper
+    from backend.app.models.channel import Channel
+    from backend.app.models.transmission import Transmission
     import sqlalchemy as sa
 
     while True:
@@ -57,23 +57,22 @@ async def _prune_expired_whispers() -> None:
             db = SessionLocal()
             try:
                 now = datetime.now(timezone.utc)
-                # Load seances that have a TTL configured
-                ttl_seances = (
-                    db.query(Seance)
-                    .filter(Seance.whisper_ttl_seconds.isnot(None))
+                ttl_channels = (
+                    db.query(Channel)
+                    .filter(Channel.transmission_ttl_seconds.isnot(None))
                     .all()
                 )
                 total_pruned = 0
-                for seance in ttl_seances:
+                for channel in ttl_channels:
                     cutoff = sa.func.now() - sa.text(
-                        f"interval '{seance.whisper_ttl_seconds} seconds'"
+                        f"interval '{channel.transmission_ttl_seconds} seconds'"
                     )
                     result = (
-                        db.query(Whisper)
+                        db.query(Transmission)
                         .filter(
-                            Whisper.seance_id == seance.id,
-                            Whisper.deleted_at.is_(None),
-                            Whisper.created_at < cutoff,
+                            Transmission.channel_id == channel.id,
+                            Transmission.deleted_at.is_(None),
+                            Transmission.created_at < cutoff,
                         )
                         .update(
                             {"deleted_at": now},
@@ -83,9 +82,9 @@ async def _prune_expired_whispers() -> None:
                     total_pruned += result
                 if total_pruned:
                     db.commit()
-                    logger.info("Pruned %d expired whispers", total_pruned)
+                    logger.info("Pruned %d expired transmissions", total_pruned)
             except Exception:
-                logger.exception("Error during whisper pruning pass")
+                logger.exception("Error during transmission pruning pass")
                 db.rollback()
             finally:
                 db.close()
@@ -98,7 +97,7 @@ async def _prune_expired_whispers() -> None:
 async def lifespan(app: FastAPI):
     """Start background tasks on boot; cancel them on shutdown."""
     subscriber_task = asyncio.create_task(start_subscriber())
-    pruner_task     = asyncio.create_task(_prune_expired_whispers())
+    pruner_task     = asyncio.create_task(_prune_expired_transmissions())
     try:
         yield
     finally:
@@ -111,13 +110,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Ouija API",
+    title="Static API",
     description=(
-        "A real-time channel for anonymous séances. Seekers open Seances, "
-        "manifest as Presences with ephemeral sigils, and exchange Whispers "
-        "across the veil."
+        "A real-time platform for anonymous shortwave channels. Operators open Channels, "
+        "connect as Contacts with ephemeral callsigns, and exchange Transmissions "
+        "across the static."
     ),
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 
@@ -166,8 +165,8 @@ def health_check():
 
 
 app.include_router(auth.router)
-app.include_router(seances.router)
-app.include_router(invites.router)
-app.include_router(whispers.router)
+app.include_router(channels.router)
+app.include_router(cipher_keys.router)
+app.include_router(transmissions.router)
 app.include_router(ws.router)
 app.include_router(debug.router)

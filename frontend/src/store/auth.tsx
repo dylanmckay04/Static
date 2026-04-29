@@ -14,7 +14,7 @@ interface AuthState {
 }
 
 const AuthCtx = createContext<AuthState>(null!)
-const KEY = 'veil:token'
+const KEY = 'static:token'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
 from app.database import SessionLocal
-from app.models.seeker import Seeker
+from app.models.operator import Operator
 
 http_bearer = HTTPBearer()
 
@@ -17,16 +17,11 @@ def get_db():
         db.close()
 
 
-def get_current_seeker(
+def get_current_operator(
     credentials: HTTPAuthorizationCredentials = Depends(http_bearer),
     db: Session = Depends(get_db),
-) -> Seeker:
-    """Resolve the bearer token to a Seeker or raise 401.
-
-    Note: ``decode_access_token`` returns ``None`` for any failure — including
-    expired, malformed, wrong-typed, or missing tokens — so we must guard
-    against that before reading ``payload`` (this used to raise 500).
-    """
+) -> Operator:
+    """Resolve the bearer token to an Operator or raise 401."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -40,14 +35,13 @@ def get_current_seeker(
     if sub is None:
         raise credentials_exception
 
-    # ``sub`` is stored as str(int) — coerce defensively.
     try:
-        seeker_id = int(sub)
+        operator_id = int(sub)
     except (TypeError, ValueError):
         raise credentials_exception
 
-    seeker = db.query(Seeker).filter(Seeker.id == seeker_id).first()
-    if seeker is None:
+    operator = db.query(Operator).filter(Operator.id == operator_id).first()
+    if operator is None:
         raise credentials_exception
 
-    return seeker
+    return operator

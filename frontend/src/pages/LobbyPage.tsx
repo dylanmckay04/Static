@@ -1,40 +1,40 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { createSeance, listSeances } from '../api/seances'
-import type { SeanceResponse } from '../api/types'
-import { sigilSvgHtml } from '../lib/sigil'
+import { createChannel, listChannels } from '../api/channels'
+import type { ChannelResponse } from '../api/types'
+import { callsignSvgHtml } from '../lib/callsign'
 import { useAuth } from '../store/auth'
 
 export default function LobbyPage() {
   const { token, clearToken } = useAuth()
   const navigate = useNavigate()
 
-  const [seances,  setSeances]  = useState<SeanceResponse[]>([])
+  const [channels,  setChannels]  = useState<ChannelResponse[]>([])
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)
 
   const [name,        setName]        = useState('')
   const [description, setDescription] = useState('')
-  const [isSealed,    setIsSealed]    = useState(false)
+  const [isEncrypted,    setIsEncrypted]    = useState(false)
   const [creating,    setCreating]    = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
-  const fetchSeances = useCallback(async () => {
+  const fetchChannels = useCallback(async () => {
     if (!token) return
     try {
       setError(null)
-      const data = await listSeances(token)
-      setSeances(data)
+      const data = await listChannels(token)
+      setChannels(data)
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { clearToken(); return }
-      setError('The séances could not be summoned.')
+      setError('Could not retrieve channels.')
     } finally {
       setLoading(false)
     }
   }, [token, clearToken])
 
-  useEffect(() => { void fetchSeances() }, [fetchSeances])
+  useEffect(() => { void fetchChannels() }, [fetchChannels])
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault()
@@ -42,33 +42,33 @@ export default function LobbyPage() {
     setCreateError(null)
     setCreating(true)
     try {
-      const s = await createSeance(
-        { name: name.trim(), description: description.trim() || undefined, is_sealed: isSealed },
+      const s = await createChannel(
+        { name: name.trim(), description: description.trim() || undefined, is_encrypted: isEncrypted },
         token,
       )
-      setName(''); setDescription(''); setIsSealed(false)
-      setSeances(prev => [...prev, s])
-      navigate(`/seances/${s.id}`)
+      setName(''); setDescription(''); setIsEncrypted(false)
+      setChannels(prev => [...prev, s])
+      navigate(`/channels/${s.id}`)
     } catch (err) {
-      setCreateError(err instanceof ApiError ? err.message : 'The séance could not be opened.')
+      setCreateError(err instanceof ApiError ? err.message : 'The channel could not be opened.')
     } finally {
       setCreating(false)
     }
   }
 
-  const enterSeance = (s: SeanceResponse) => {
-    navigate(`/seances/${s.id}`)
+  const enterChannel = (s: ChannelResponse) => {
+    navigate(`/channels/${s.id}`)
   }
 
-  // Generate a small sigil icon for each seance name
-  const nameSeal = (name: string) => ({ __html: sigilSvgHtml(name, 22) })
+  // Generate a small callsign icon for each channel name
+  const nameCallsign = (name: string) => ({ __html: callsignSvgHtml(name, 22) })
 
   return (
     <div className="lobby-layout">
       <header className="lobby-header">
-        <h1 className="flicker">Veil</h1>
+        <h1 className="scanline">Static</h1>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => void fetchSeances()}>
+          <button className="btn btn-ghost btn-sm" onClick={() => void fetchChannels()}>
             Refresh
           </button>
           <button
@@ -83,11 +83,11 @@ export default function LobbyPage() {
       <div className="lobby-body">
         {/* Create form */}
         <form className="create-form" onSubmit={handleCreate}>
-          <h2>Open a new séance</h2>
+          <h2>Open a new channel</h2>
           <div className="create-form-row">
             <input
               className="input"
-              placeholder="Name this gathering"
+              placeholder="Channel name"
               value={name}
               onChange={e => setName(e.target.value)}
               maxLength={100}
@@ -96,7 +96,7 @@ export default function LobbyPage() {
             />
             <input
               className="input"
-              placeholder="Purpose or omen (optional)"
+              placeholder="Purpose (optional)"
               value={description}
               onChange={e => setDescription(e.target.value)}
               maxLength={300}
@@ -106,17 +106,17 @@ export default function LobbyPage() {
             <label>
               <input
                 type="checkbox"
-                checked={isSealed}
-                onChange={e => setIsSealed(e.target.checked)}
+                checked={isEncrypted}
+                onChange={e => setIsEncrypted(e.target.checked)}
               />
-              Sealed — by invitation only
+              Encrypted — cipher key required
             </label>
             <button
               className="btn btn-primary btn-sm"
               type="submit"
               disabled={creating || !name.trim()}
             >
-              {creating ? 'Opening the circle…' : 'Open séance'}
+              {creating ? 'Opening channel…' : 'Open channel'}
             </button>
             {createError && <span className="error-msg">{createError}</span>}
           </div>
@@ -125,39 +125,39 @@ export default function LobbyPage() {
         {/* Séance list */}
         <div>
           <h2 style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
-            Active séances
+            Active channels
           </h2>
 
           {loading ? (
             <div className="center-page" style={{ padding: '48px 0' }}>
               <div className="spinner" />
-              <span>Lighting the candles…</span>
+              <span>Scanning frequencies…</span>
             </div>
           ) : error ? (
             <p className="error-msg">{error}</p>
-          ) : seances.length === 0 ? (
-            <p className="empty-state">The board is silent. Open a séance above.</p>
+          ) : channels.length === 0 ? (
+            <p className="empty-state">No channels found. Open one above.</p>
           ) : (
-            <div className="seance-grid">
-              {seances.map(s => (
+            <div className="channel-grid">
+              {channels.map(s => (
                 <div
                   key={s.id}
-                  className={`seance-card${s.is_sealed ? ' sealed' : ''}`}
-                  onClick={() => enterSeance(s)}
+                  className={`channel-card${s.is_encrypted ? ' sealed' : ''}`}
+                  onClick={() => enterChannel(s)}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={e => e.key === 'Enter' && enterSeance(s)}
-                  title={s.is_sealed ? 'This séance is sealed — invitation only' : undefined}
+                  onKeyDown={e => e.key === 'Enter' && enterChannel(s)}
+                  title={s.is_encrypted ? 'This channel is encrypted — cipher key required' : undefined}
                 >
-                  <div className="seance-card-name">
-                    <span dangerouslySetInnerHTML={nameSeal(s.name)} />
+                  <div className="channel-card-name">
+                    <span dangerouslySetInnerHTML={nameCallsign(s.name)} />
                     {s.name}
-                    {s.is_sealed && <span className="badge badge-sealed">Sealed</span>}
+                    {s.is_encrypted && <span className="badge badge-encrypted">Encrypted</span>}
                   </div>
                   {s.description && (
-                    <div className="seance-card-desc">{s.description}</div>
+                    <div className="channel-card-desc">{s.description}</div>
                   )}
-                  <div className="seance-card-footer">
+                  <div className="channel-card-footer">
                     <span className="badge badge-open">
                       {new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>

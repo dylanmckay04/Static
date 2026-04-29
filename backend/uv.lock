@@ -468,74 +468,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ouija-api"
-version = "0.4.0"
-source = { editable = "." }
-dependencies = [
-    { name = "alembic" },
-    { name = "bcrypt" },
-    { name = "fakeredis" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "httpx-ws" },
-    { name = "psycopg2-binary" },
-    { name = "pydantic", extra = ["email"] },
-    { name = "pydantic-settings" },
-    { name = "pytest-asyncio" },
-    { name = "python-dotenv" },
-    { name = "python-jose" },
-    { name = "redis" },
-    { name = "slowapi" },
-    { name = "sqlalchemy" },
-    { name = "testcontainers" },
-    { name = "uvicorn" },
-    { name = "websockets" },
-]
-
-[package.optional-dependencies]
-test = [
-    { name = "anyio" },
-    { name = "fakeredis" },
-    { name = "httpx" },
-    { name = "httpx-ws" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "testcontainers" },
-    { name = "websockets" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.18.4" },
-    { name = "anyio", marker = "extra == 'test'", specifier = ">=4.0.0" },
-    { name = "bcrypt", specifier = ">=5.0.0" },
-    { name = "fakeredis", specifier = ">=2.35.1" },
-    { name = "fakeredis", extras = ["aioredis"], marker = "extra == 'test'", specifier = ">=2.26.0" },
-    { name = "fastapi", specifier = ">=0.136.1" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "httpx", marker = "extra == 'test'", specifier = ">=0.28.1" },
-    { name = "httpx-ws", specifier = ">=0.9.0" },
-    { name = "httpx-ws", marker = "extra == 'test'", specifier = ">=0.6.0" },
-    { name = "psycopg2-binary", specifier = ">=2.9.12" },
-    { name = "pydantic", extras = ["email"], specifier = ">=2.13.3" },
-    { name = "pydantic-settings", specifier = ">=2.14.0" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.24.0" },
-    { name = "python-dotenv", specifier = ">=1.2.2" },
-    { name = "python-jose", specifier = ">=3.5.0" },
-    { name = "redis", specifier = ">=7.4.0" },
-    { name = "slowapi", specifier = ">=0.1.9" },
-    { name = "sqlalchemy", specifier = ">=2.0.49" },
-    { name = "testcontainers", specifier = ">=4.14.2" },
-    { name = "testcontainers", extras = ["postgres"], marker = "extra == 'test'", specifier = ">=4.8.0" },
-    { name = "uvicorn", specifier = ">=0.46.0" },
-    { name = "websockets", specifier = ">=16.0" },
-    { name = "websockets", marker = "extra == 'test'", specifier = ">=16.0" },
-]
-provides-extras = ["test"]
-
-[[package]]
 name = "packaging"
 version = "26.1"
 source = { registry = "https://pypi.org/simple" }
@@ -871,6 +803,74 @@ sdist = { url = "https://files.pythonhosted.org/packages/81/69/17425771797c36cde
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/c9/584bc9651441b4ba60cc4d557d8a547b5aff901af35bda3a4ee30c819b82/starlette-1.0.0-py3-none-any.whl", hash = "sha256:d3ec55e0bb321692d275455ddfd3df75fff145d009685eb40dc91fc66b03d38b", size = 72651, upload-time = "2026-03-22T18:29:45.111Z" },
 ]
+
+[[package]]
+name = "static-api"
+version = "0.4.0"
+source = { editable = "." }
+dependencies = [
+    { name = "alembic" },
+    { name = "bcrypt" },
+    { name = "fakeredis" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "httpx-ws" },
+    { name = "psycopg2-binary" },
+    { name = "pydantic", extra = ["email"] },
+    { name = "pydantic-settings" },
+    { name = "pytest-asyncio" },
+    { name = "python-dotenv" },
+    { name = "python-jose" },
+    { name = "redis" },
+    { name = "slowapi" },
+    { name = "sqlalchemy" },
+    { name = "testcontainers" },
+    { name = "uvicorn" },
+    { name = "websockets" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "anyio" },
+    { name = "fakeredis" },
+    { name = "httpx" },
+    { name = "httpx-ws" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "testcontainers" },
+    { name = "websockets" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.18.4" },
+    { name = "anyio", marker = "extra == 'test'", specifier = ">=4.0.0" },
+    { name = "bcrypt", specifier = ">=5.0.0" },
+    { name = "fakeredis", specifier = ">=2.35.1" },
+    { name = "fakeredis", extras = ["aioredis"], marker = "extra == 'test'", specifier = ">=2.26.0" },
+    { name = "fastapi", specifier = ">=0.136.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "httpx", marker = "extra == 'test'", specifier = ">=0.28.1" },
+    { name = "httpx-ws", specifier = ">=0.9.0" },
+    { name = "httpx-ws", marker = "extra == 'test'", specifier = ">=0.6.0" },
+    { name = "psycopg2-binary", specifier = ">=2.9.12" },
+    { name = "pydantic", extras = ["email"], specifier = ">=2.13.3" },
+    { name = "pydantic-settings", specifier = ">=2.14.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.24.0" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "python-jose", specifier = ">=3.5.0" },
+    { name = "redis", specifier = ">=7.4.0" },
+    { name = "slowapi", specifier = ">=0.1.9" },
+    { name = "sqlalchemy", specifier = ">=2.0.49" },
+    { name = "testcontainers", specifier = ">=4.14.2" },
+    { name = "testcontainers", extras = ["postgres"], marker = "extra == 'test'", specifier = ">=4.8.0" },
+    { name = "uvicorn", specifier = ">=0.46.0" },
+    { name = "websockets", specifier = ">=16.0" },
+    { name = "websockets", marker = "extra == 'test'", specifier = ">=16.0" },
+]
+provides-extras = ["test"]
 
 [[package]]
 name = "testcontainers"

@@ -22,7 +22,7 @@ export default function App() {
           <Route path="/login"       element={<LoginPage />} />
           <Route path="/register"    element={<RegisterPage />} />
           <Route path="/lobby"       element={<Protected><LobbyPage /></Protected>} />
-          <Route path="/seances/:id" element={<Protected><RoomPage /></Protected>} />
+          <Route path="/channels/:id" element={<Protected><RoomPage /></Protected>} />
           <Route path="/invite"      element={<InvitePage />} />
           <Route path="*"            element={<Navigate to="/lobby" replace />} />
         </Routes>

@@ -22,7 +22,7 @@ export default function RegisterPage() {
       setToken(access_token)
       navigate('/lobby', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The ritual failed. Try again.')
+      setError(err instanceof ApiError ? err.message : 'Registration failed. Try again.')
     } finally {
       setLoading(false)
     }
@@ -31,8 +31,8 @@ export default function RegisterPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1 className="auth-title flicker">Veil</h1>
-        <p className="auth-subtitle">Inscribe your name in the book</p>
+        <h1 className="auth-title scanline">Static</h1>
+        <p className="auth-subtitle">Register a new operator</p>
         <form onSubmit={handleSubmit} className="auth-form">
           <input
             className="input" type="email" placeholder="Your address"
@@ -46,11 +46,11 @@ export default function RegisterPage() {
           />
           {error && <p className="error-msg">{error}</p>}
           <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? 'Inscribing…' : 'Bind my name'}
+            {loading ? 'Registering…' : 'Register'}
           </button>
         </form>
         <p className="auth-link">
-          Already bound? <Link to="/login">Enter</Link>
+          Already registered? <Link to="/login">Sign in</Link>
         </p>
       </div>
     </div>

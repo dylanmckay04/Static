@@ -3,13 +3,13 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 
-class SeekerCreate(BaseModel):
+class OperatorCreate(BaseModel):
     email: EmailStr
     password: str
 
 
-class SeekerResponse(BaseModel):
-    """Returned to the Seeker about themselves (e.g. after registration)."""
+class OperatorResponse(BaseModel):
+    """Returned to the Operator about themselves (e.g. after registration)."""
 
     id: int
     email: EmailStr

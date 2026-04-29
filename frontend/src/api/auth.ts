@@ -1,8 +1,8 @@
 import { post } from './client.js'
-import type { LoginRequest, SeekerCreate, SeekerResponse, SocketTokenResponse, TokenResponse } from './types.js'
+import type { LoginRequest, OperatorCreate, OperatorResponse, SocketTokenResponse, TokenResponse } from './types.js'
 
-export const register = (body: SeekerCreate) =>
-  post<SeekerResponse>('/auth/register', body)
+export const register = (body: OperatorCreate) =>
+  post<OperatorResponse>('/auth/register', body)
 
 export const login = (body: LoginRequest) =>
   post<TokenResponse>('/auth/login', body)

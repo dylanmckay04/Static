@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { joinViaInvite } from '../api/seances'
+import { joinViaCipherKey } from '../api/channels'
 import { useAuth } from '../store/auth'
 
 export default function InvitePage() {
@@ -13,12 +13,12 @@ export default function InvitePage() {
   useEffect(() => {
     const inviteToken = params.get('token')
     if (!inviteToken) {
-      setError('No invitation token found.')
+      setError('No cipher key found.')
       return
     }
 
     if (!token) {
-      sessionStorage.setItem('pendingInviteToken', inviteToken)
+      sessionStorage.setItem('pendingCipherKey', inviteToken)
       navigate('/login', { replace: true })
       return
     }
@@ -26,11 +26,11 @@ export default function InvitePage() {
     let cancelled = false
     const join = async () => {
       try {
-        const presence = await joinViaInvite(inviteToken, token)
-        if (!cancelled) navigate(`/seances/${presence.seance_id}`, { replace: true })
+        const presence = await joinViaCipherKey(inviteToken, token)
+        if (!cancelled) navigate(`/channels/${presence.channel_id}`, { replace: true })
       } catch (err) {
         if (cancelled) return
-        setError(err instanceof ApiError ? err.message : 'The invitation could not be accepted.')
+        setError(err instanceof ApiError ? err.message : 'The cipher key could not be accepted.')
       }
     }
 
@@ -52,7 +52,7 @@ export default function InvitePage() {
   return (
     <div className="center-page">
       <div className="spinner" />
-      <span>Accepting your invitation…</span>
+      <span>Verifying cipher key…</span>
     </div>
   )
 }

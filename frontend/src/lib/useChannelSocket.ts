@@ -5,7 +5,7 @@ import type { WsMessage } from '../api/types'
 export type WsStatus = 'connecting' | 'connected' | 'reconnecting' | 'dead'
 
 interface Options {
-  seanceId: number
+  channelId: number
   token: string
   enabled: boolean
   /** Called for every inbound frame. */
@@ -17,8 +17,8 @@ interface Options {
   onReconnect: (lastSeenId: number) => void
 }
 
-export function useSeanceSocket({
-  seanceId,
+export function useChannelSocket({
+  channelId,
   token,
   enabled,
   onMessage,
@@ -26,7 +26,7 @@ export function useSeanceSocket({
 }: Options) {
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting')
 
-  // Always-current callback refs — avoids stale closures inside the effect
+  // Always-current callback refs - avoids stale closures inside the effect
   const onMessageRef   = useRef(onMessage)
   const onReconnectRef = useRef(onReconnect)
   onMessageRef.current   = onMessage
@@ -45,10 +45,10 @@ export function useSeanceSocket({
     lastSeenIdRef.current = Math.max(lastSeenIdRef.current ?? 0, id)
   }, [])
 
-  /** Send a whisper frame. No-ops if the socket is not open. */
+  /** Send a transmission frame. No-ops if the socket is not open. */
   const sendWhisper = useCallback((content: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ op: 'whisper', content }))
+      wsRef.current.send(JSON.stringify({ op: 'transmission', content }))
     }
   }, [])
 
@@ -73,7 +73,7 @@ export function useSeanceSocket({
         if (destroyed) return
 
         const wsUrl =
-          `${BASE_URL.replace(/^http/, 'ws')}/ws/seances/${seanceId}` +
+          `${BASE_URL.replace(/^http/, 'ws')}/ws/channels/${channelId}` +
           `?token=${encodeURIComponent(socket_token)}`
         const ws = new WebSocket(wsUrl)
         wsRef.current = ws
@@ -93,8 +93,8 @@ export function useSeanceSocket({
         ws.onmessage = ({ data }: MessageEvent<string>) => {
           try {
             const msg = JSON.parse(data) as WsMessage
-            // Track highest seen whisper id so reconnects know where to backfill from.
-            if (msg.op === 'whisper') {
+            // Track highest seen transmission id so reconnects know where to backfill from.
+            if (msg.op === 'transmission') {
               lastSeenIdRef.current = Math.max(lastSeenIdRef.current ?? 0, msg.id)
             }
             onMessageRef.current(msg)
@@ -130,7 +130,7 @@ export function useSeanceSocket({
       wsRef.current?.close(1000, 'unmounted')
       wsRef.current = null
     }
-  }, [seanceId, token, enabled]) // reconnect only when these identity-level props change
+  }, [channelId, token, enabled]) // reconnect only when these identity-level props change
 
   return { wsStatus, sendWhisper, setLastSeen }
 }

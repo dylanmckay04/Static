@@ -39,44 +39,45 @@ The `TESTING=1` env var skips the `wait_for_db()` startup check in `app/main.py`
 
 | Term | Meaning |
 |------|---------|
-| `Seeker` | An authenticated user account |
-| `Seance` | A chat room; can be public or `is_sealed` (private) |
-| `Presence` | A Seeker's membership in a Seance; has an anonymous `sigil` |
-| `Sigil` | The randomly-generated in-room pseudonym (e.g. "The Pale Lantern") |
-| `Warden` | The Seeker who created the Seance; a Presence with `role=warden` |
-| `Whisper` | A message posted in a Seance |
+| `Operator` | An authenticated user account |
+| `Channel` | A chat room; can be open or `is_encrypted` (private) |
+| `Contact` | An Operator's membership in a Channel; has an anonymous `callsign` |
+| `Callsign` | The randomly-generated in-channel pseudonym (e.g. "The Silent Carrier") |
+| `Controller` | The Operator who created the Channel; a Contact with `role=controller` |
+| `Transmission` | A message posted in a Channel |
+| `Cipher Key` | A single-use invite token granting access to an encrypted Channel |
 
 **Layer structure:**
 
 ```
 routers/      HTTP boundary — thin, delegates to services
-services/     Business logic (seance_service, auth_service, presence_service)
+services/     Business logic (channel_service, auth_service, contact_service)
 models/       SQLAlchemy ORM models
 schemas/      Pydantic request/response models
-core/         Cross-cutting: config, security (JWT/bcrypt), sigil generator, rate limiter, DI dependencies
+core/         Cross-cutting: config, security (JWT/bcrypt), callsign generator, rate limiter, DI dependencies
 ```
 
 **Auth flow:** Two token types in `core/security.py`:
 - `access` token (24h, JWT) — used for all HTTP endpoints via `HTTPBearer` in `core/dependencies.py`
 - `socket` token (60s, JWT, one-time-use) — minted via `POST /auth/socket-token`, JTI stored in Redis so the WebSocket endpoint can consume it atomically
 
-**WebSocket event protocol:** Endpoint is `GET /ws/seances/{seance_id}?token=<socket_token>`. Before connecting, the client mints a one-shot socket token via `POST /auth/socket-token`. Auth/presence failures arrive as WebSocket close codes (`4001` unauthorised, `4003` forbidden) — not JSON frames. All other unexpected closes trigger exponential-backoff reconnect (500 ms × 2ⁿ, cap 30 s, 8 retries).
+**WebSocket event protocol:** Endpoint is `GET /ws/channels/{channel_id}?token=<socket_token>`. Before connecting, the client mints a one-shot socket token via `POST /auth/socket-token`. Auth/contact failures arrive as WebSocket close codes (`4001` unauthorised, `4003` forbidden) — not JSON frames. All other unexpected closes trigger exponential-backoff reconnect (500 ms × 2ⁿ, cap 30 s, 8 retries).
 
 *Client → Server:*
 
 | `op` | Fields | Notes |
 |------|--------|-------|
-| `whisper` | `content: string` | 1–4 000 chars after strip; rate-limited (10 burst, 1 token/s per seeker+seance) |
+| `transmission` | `content: string` | 1–4 000 chars after strip; rate-limited (10 burst, 1 token/s per operator+channel) |
 
-*Server → Client — broadcast to all present (`routers/ws.py`, `routers/seances.py`, `routers/whispers.py`, `routers/invites.py`):*
+*Server → Client — broadcast to all present (`routers/ws.py`, `routers/channels.py`, `routers/transmissions.py`, `routers/cipher_keys.py`):*
 
 | `op` | Payload fields | Trigger |
 |------|---------------|---------|
-| `whisper` | `id`, `seance_id`, `sigil`, `content`, `is_deleted`, `created_at` | New whisper posted via WS or `POST /seances/{id}/whispers` |
-| `enter` | `sigil` | Seeker enters via `POST /seances/{id}/enter` or joins via invite (`POST /seances/join`) |
-| `depart` | `sigil` | WS disconnect, `DELETE /seances/{id}/depart`, or warden kick |
-| `dissolve` | — | Warden deletes the seance (`DELETE /seances/{id}`) |
-| `redact` | `whisper_id` | Warden/moderator soft-deletes a whisper (`DELETE /seances/{id}/whispers/{id}`) |
+| `transmission` | `id`, `channel_id`, `callsign`, `content`, `is_deleted`, `created_at` | New transmission posted via WS or `POST /channels/{id}/transmissions` |
+| `enter` | `callsign` | Operator enters via `POST /channels/{id}/enter` or joins via cipher key (`POST /channels/join`) |
+| `depart` | `callsign` | WS disconnect, `DELETE /channels/{id}/depart`, or controller kick |
+| `dissolve` | — | Controller deletes the channel (`DELETE /channels/{id}`) |
+| `redact` | `transmission_id` | Controller/relay soft-deletes a transmission (`DELETE /channels/{id}/transmissions/{id}`) |
 
 *Server → Client — unicast to sender only:*
 
@@ -84,15 +85,17 @@ core/         Cross-cutting: config, security (JWT/bcrypt), sigil generator, rat
 |------|--------|-----------|
 | `error` | `detail: string` | Validation failure, rate limit exceeded, unknown op, or service error |
 
-Note: after a `redact` the matching whisper's `content` becomes `"⸻ withdrawn ⸻"` and `is_deleted` flips to `true` when next fetched — no additional frame is sent. The `WsMessage` TypeScript union in `frontend/src/api/types.ts` is the canonical client-side type reference.
+Note: after a `redact` the matching transmission's `content` becomes `"⸻ redacted ⸻"` and `is_deleted` flips to `true` when next fetched — no additional frame is sent. The `WsMessage` TypeScript union in `frontend/src/api/types.ts` is the canonical client-side type reference.
 
-**Identity isolation:** `Seeker.id`/`email` is never exposed inside a Seance. The `sigil` on a `Presence` (and snapshotted onto `Whisper.sigil`) is the only visible identity. Leaving and re-entering a Seance yields a new sigil.
+**Identity isolation:** `Operator.id`/`email` is never exposed inside a Channel. The `callsign` on a `Contact` (and snapshotted onto `Transmission.callsign`) is the only visible identity. Leaving and re-entering a Channel yields a new callsign.
 
-**Sigil generation:** `core/sigils.py` produces one of three patterns ("The {Adj} {Noun}", "{Noun}-and-{Noun}", "{Number} {Noun}s"). Uniqueness within a Seance is enforced by `uq_presence_seance_sigil`; `presence_service.assign_presence()` retries up to 8 times on `IntegrityError`.
+**Callsign generation:** `core/callsigns.py` produces one of three patterns ("The {Adj} {Noun}", "{Noun}-and-{Noun}", "{Number} {Noun}s"). Uniqueness within a Channel is enforced by `uq_contact_channel_callsign`; `contact_service.assign_contact()` retries up to 8 times on `IntegrityError`.
 
-**Access control for sealed Seances:** `seance_service._require_visibility()` gates all read/enter operations. Sealed Seances are visible only to Seekers who already have a Presence (invitation flow is not yet built).
+**Access control for encrypted Channels:** `channel_service._require_visibility()` gates all read/enter operations. Encrypted Channels are visible only to Operators who already have a Contact (cipher key invitation flow required for new entrants).
 
-**Whisper hot path index:** `ix_whispers_seance_id_id` composite index on `(seance_id, id)` for paginated chat history queries.
+**Transmission hot path index:** `ix_transmissions_channel_id_id` composite index on `(channel_id, id)` for paginated transmission history queries.
+
+**Redis key patterns:** `channel:{id}` pub/sub fan-out key for multi-worker WebSocket broadcasting. Rate limiter buckets: `wsbucket:{channel_id}:{operator_id}`.
 
 **Rate limiting:** `slowapi` wraps every route; limits are set per-endpoint in `routers/`.
 

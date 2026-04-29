@@ -1,6 +1,6 @@
 /**
- * Deterministic SVG sigil seal generator.
- * Same sigil string always produces the same SVG.
+ * Deterministic SVG callsign badge generator.
+ * Same callsign string always produces the same SVG.
  */
 
 // ── Seeded LCG RNG ────────────────────────────────────────────────────────
@@ -23,30 +23,30 @@ function makePrng(seed: number) {
 }
 
 // ── Glyph alphabet ────────────────────────────────────────────────────────
-// 20 rune-like paths, all defined in a 0-20 local coordinate space.
+// 20 shortwave/signal-themed paths, all defined in a 0-20 local coordinate space.
 // Each glyph is an array of SVG path `d` strings.
 
 const GLYPHS: string[] = [
-  'M10,2 L10,18 M6,7 L14,7',                             // Isa + cross
-  'M6,2 L10,18 L14,2',                                   // Tiwaz (arrow up)
-  'M6,18 L10,2 L14,18',                                  // Tiwaz (arrow down)
-  'M6,6 L10,2 L14,6 M6,14 L10,18 L14,14',               // double chevron
-  'M10,2 L10,18 M6,2 L14,2 M6,18 L14,18',               // I-beam
-  'M6,2 L14,10 L6,18',                                   // Laguz
-  'M14,2 L6,10 L14,18',                                  // Laguz mirrored
-  'M6,2 L14,2 L10,10 L14,18 L6,18',                     // Odal-like
-  'M10,2 L14,10 L10,18 L6,10 Z',                        // diamond
-  'M6,2 L10,10 L14,2 M6,18 L10,10 L14,18',              // Gebo (X)
-  'M10,2 L10,18 M6,10 L14,10 M7,5 L13,5',               // Nauthiz
-  'M6,2 L6,18 L14,10 L6,10',                            // Raidho
-  'M14,2 L14,18 L6,10 L14,10',                          // Raidho mirrored
-  'M6,14 L6,6 L14,6 L14,14',                            // open square
-  'M6,2 L14,2 L14,18 M6,10 L14,10',                     // Berkano-like
-  'M6,6 L10,2 L14,6 L10,18',                            // Dagaz-like
-  'M10,2 C4,6 4,14 10,18 C16,14 16,6 10,2',            // eye/oval
-  'M6,2 L14,18 M14,2 L6,18 M10,2 L10,18',              // triple cross
-  'M10,2 L10,18 M6,6 L14,6 M6,14 L14,14',              // double bar
-  'M6,10 L10,2 L14,10 M6,10 L10,18 L14,10',            // hexagonal diamond
+  'M10,18 L10,6 M6,6 L14,6 M10,6 L4,10 M10,6 L16,10',                                   // antenna tower
+  'M2,10 C5,2 9,2 10,10 C11,18 15,18 18,10',                                             // sine wave
+  'M2,13 L5,13 L5,6 L9,6 L9,13 L13,13 L13,6 L17,6 L17,13',                              // square wave
+  'M3,18 L3,8 M7,18 L7,4 M11,18 L11,11 M15,18 L15,6',                                   // spectrum bars
+  'M10,4 C17,4 17,16 10,16 M10,2 C20,2 20,18 10,18',                                    // radiating arcs
+  'M10,2 L10,18 M2,10 L18,10 M10,10 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0',            // crosshairs
+  'M10,2 L18,16 L2,16 Z',                                                                 // triangle
+  'M2,14 L8,4 L8,14 L14,4 L14,14',                                                       // sawtooth wave
+  'M2,6 L18,6 M2,14 L18,14 M6,2 L6,18 M14,2 L14,18',                                   // grid
+  'M2,10 L7,10 M9,8 L11,12 M9,12 L11,8 M13,10 L18,10',                                 // dash-X-dash
+  'M10,18 L10,10 M7,8 A4,4 0 0,1 13,8 M5,5 A7,7 0 0,1 15,5 M3,2 A10,10 0 0,1 17,2',  // broadcast tower
+  'M12,2 L6,10 L11,10 L8,18 L14,10 L9,10 Z',                                            // lightning bolt
+  'M10,2 L18,10 L10,18 L2,10 Z',                                                         // diamond
+  'M2,7 L18,7 M2,13 L18,13',                                                             // double bar
+  'M4,4 L16,16 M4,16 L16,4 M2,10 L18,10',                                               // X with horizontal
+  'M4,4 L16,4 L4,16 L16,16 Z',                                                           // hourglass
+  'M2,10 L5,10 L5,4 L8,14 L11,4 L14,14 L17,4 L17,10',                                  // scope trace
+  'M10,10 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0 M10,10 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0', // concentric rings
+  'M10,10 L14,6 M6,10 A4,4 0 1,1 14,10',                                                // tuning dial
+  'M2,10 L6,4 L6,16 L10,10 L14,4 L14,16 L18,10',                                       // chevron wave
 ]
 
 // ── Shape outlines ─────────────────────────────────────────────────────────
@@ -104,16 +104,16 @@ function perimeterDots(shape: Shape, count: number): Array<{ x: number; y: numbe
 
 // ── Main export ────────────────────────────────────────────────────────────
 
-export function generateSigilSvg(sigil: string, size = 48): string {
-  const seed = hash(sigil)
+export function generateCallsignSvg(callsign: string, size = 48): string {
+  const seed = hash(callsign)
   const rng  = makePrng(seed)
 
   const shape    = SHAPES[Math.floor(rng() * SHAPES.length)]
   const dotCount = 3 + Math.floor(rng() * 4)          // 3–6 perimeter dots
   const dots     = perimeterDots(shape, dotCount)
 
-  // Pick 2–3 glyphs; place them inside the shape
-  const glyphCount = 1 + Math.floor(rng() * 2)         // 1–2 glyphs
+  // Pick 1–2 glyphs; place them inside the shape
+  const glyphCount = 1 + Math.floor(rng() * 2)
   const chosenGlyphs = Array.from({ length: glyphCount }, () =>
     GLYPHS[Math.floor(rng() * GLYPHS.length)]
   )
@@ -135,8 +135,8 @@ export function generateSigilSvg(sigil: string, size = 48): string {
     `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.4" fill="currentColor" opacity="0.7"/>`
   ).join('\n')
 
-  // Accent color picked from gold palette
-  const colors = ['#c9a227', '#b8891a', '#d4af37', '#a07d18', '#c9943a']
+  // Accent color picked from amber palette
+  const colors = ['#ffb000', '#cc8800', '#e6a000', '#ff9900', '#ffc333']
   const color  = colors[Math.floor(rng() * colors.length)]
 
   return `<svg
@@ -144,7 +144,7 @@ export function generateSigilSvg(sigil: string, size = 48): string {
     viewBox="0 0 60 60"
     width="${size}"
     height="${size}"
-    aria-label="${sigil} seal"
+    aria-label="${callsign}"
     style="color:${color}; flex-shrink:0;"
   >
     <path d="${shape.outline}" stroke="currentColor" stroke-width="1.2" fill="none" opacity="0.75"/>
@@ -154,6 +154,6 @@ export function generateSigilSvg(sigil: string, size = 48): string {
 }
 
 /** React-safe: returns the SVG as a string for dangerouslySetInnerHTML */
-export function sigilSvgHtml(sigil: string, size = 36): string {
-  return generateSigilSvg(sigil, size)
+export function callsignSvgHtml(callsign: string, size = 36): string {
+  return generateCallsignSvg(callsign, size)
 }
