@@ -12,6 +12,7 @@ import {
   departChannel,
   dissolveChannel,
   enterChannel,
+  getChannel,
   getMyContact,
   getTransmissions,
   kickByCallsign,
@@ -112,14 +113,11 @@ export default function RoomPage() {
         if (cancelled) return
         setMyContact(own)
 
-        const [, contactList] = await Promise.all([
-          fetch(`http://localhost:8000/channels/${channelId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }).then(r => r.json()).then((d: { name: string }) => {
-            if (!cancelled) setChannelName(d.name)
-          }),
+        const [channel, contactList] = await Promise.all([
+          getChannel(channelId, token),
           listContacts(channelId, token),
         ])
+        if (!cancelled) setChannelName(channel.name)
         if (cancelled) return
         setContacts(contactList)
 
