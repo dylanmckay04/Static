@@ -4,13 +4,10 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_operator, get_db
 from app.core.limiter import limiter
 from app.models.operator import Operator
-from app.schemas.auth import LoginRequest, SocketTokenResponse, TokenResponse
+from app.schemas.auth import GitHubCallbackRequest, GitHubLoginURLResponse, LoginRequest, SocketTokenResponse, TokenResponse
 from app.schemas.operator import OperatorCreate, OperatorResponse
-from app.services.auth_service import (
-    issue_socket_token,
-    login_operator,
-    register_operator,
-)
+from app.services.auth_service import issue_socket_token, login_operator, register_operator
+from app.services.github_service import generate_github_login_url, github_callback
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -33,6 +30,23 @@ async def login(
     db: Session = Depends(get_db),
 ):
     access_token = login_operator(payload.email, payload.password, db)
+    return TokenResponse(access_token=access_token)
+
+
+@router.get("/github", response_model=GitHubLoginURLResponse)
+@limiter.limit("20/minute")
+async def github_login(request: Request):
+    return await generate_github_login_url()
+
+
+@router.post("/github/callback", response_model=TokenResponse)
+@limiter.limit("20/minute")
+async def github_login_callback(
+    request: Request,
+    payload: GitHubCallbackRequest,
+    db: Session = Depends(get_db),
+):
+    access_token = await github_callback(payload.code, payload.state, db)
     return TokenResponse(access_token=access_token)
 
 

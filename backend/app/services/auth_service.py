@@ -34,7 +34,11 @@ def register_operator(payload: OperatorCreate, db: Session) -> Operator:
 def login_operator(email: str, password: str, db: Session) -> str:
     """Validate credentials and return a signed access token."""
     operator = db.query(Operator).filter(Operator.email == email).first()
-    if not operator or not verify_password(password, operator.hashed_password):
+    if (
+        not operator
+        or operator.hashed_password is None
+        or not verify_password(password, operator.hashed_password)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",

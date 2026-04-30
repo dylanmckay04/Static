@@ -16,3 +16,13 @@ class SocketTokenResponse(BaseModel):
 
     socket_token: str
     jti: str
+
+
+class GitHubLoginURLResponse(BaseModel):
+    url: str
+    state: str
+
+
+class GitHubCallbackRequest(BaseModel):
+    code: str
+    state: str
