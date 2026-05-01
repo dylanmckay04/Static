@@ -80,19 +80,19 @@ export default function RegisterPage() {
           type="button"
           className="btn btn-ghost"
           style={{ width: '100%' }}
-          onClick={handleGithubLogin}
-          disabled={ghLoading || gLoading || loading}
+          onClick={handleGoogleLogin}
+          disabled={gLoading || ghLoading || loading}
         >
-          {ghLoading ? 'Redirecting…' : 'Continue with GitHub'}
+          {gLoading ? 'Redirecting…' : 'Continue with Google'}
         </button>
         <button
           type="button"
           className="btn btn-ghost"
           style={{ width: '100%' }}
-          onClick={handleGoogleLogin}
-          disabled={gLoading || ghLoading || loading}
+          onClick={handleGithubLogin}
+          disabled={ghLoading || gLoading || loading}
         >
-          {gLoading ? 'Redirecting…' : 'Continue with Google'}
+          {ghLoading ? 'Redirecting…' : 'Continue with GitHub'}
         </button>
         <p className="auth-link">
           Already registered? <Link to="/login">Sign in</Link>

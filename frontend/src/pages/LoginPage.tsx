@@ -85,19 +85,19 @@ export default function LoginPage() {
           type="button"
           className="btn btn-ghost"
           style={{ width: '100%' }}
-          onClick={handleGithubLogin}
-          disabled={ghLoading || gLoading || loading}
+          onClick={handleGoogleLogin}
+          disabled={gLoading || ghLoading || loading}
         >
-          {ghLoading ? 'Redirecting…' : 'Sign in with GitHub'}
+          {gLoading ? 'Redirecting…' : 'Sign in with Google'}
         </button>
         <button
           type="button"
           className="btn btn-ghost"
           style={{ width: '100%' }}
-          onClick={handleGoogleLogin}
-          disabled={gLoading || ghLoading || loading}
+          onClick={handleGithubLogin}
+          disabled={ghLoading || gLoading || loading}
         >
-          {gLoading ? 'Redirecting…' : 'Sign in with Google'}
+          {ghLoading ? 'Redirecting…' : 'Sign in with GitHub'}
         </button>
         <p className="auth-link">
           No account? <Link to="/register">Register</Link>
