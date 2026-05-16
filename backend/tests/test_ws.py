@@ -21,25 +21,31 @@ async def get_socket_token(client: AsyncClient, access_token: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_ws_connect_and_whisper_roundtrip(client, make_token, db_session):
+async def test_ws_connect_and_whisper_roundtrip(make_token, db_session):
     """Verify WebSocket accepts valid connection and hub receives messages."""
-    alice = await make_token("ws_alice@test.com")
-    bob   = await make_token("ws_bob@test.com")
+    from httpx_ws.transport import ASGIWebSocketTransport
+
+    async with AsyncClient(
+        transport=ASGIWebSocketTransport(app=app),
+        base_url="http://test",
+    ) as ws_client:
+        alice = await make_token("ws_alice@test.com")
+        bob   = await make_token("ws_bob@test.com")
 
     # Create channel as alice (controller)
-    r = await client.post("/channels", json={"name": "WS Test Room"}, headers=auth(alice))
+    r = await ws_client.post("/channels", json={"name": "WS Test Room"}, headers=auth(alice))
     assert r.status_code == 201
     sid = r.json()["id"]
 
     # Bob enters via REST
-    await client.post(f"/channels/{sid}/enter", headers=auth(bob))
+    await ws_client.post(f"/channels/{sid}/enter", headers=auth(bob))
 
     # Get socket tokens
-    alice_st = await get_socket_token(client, alice)
-    bob_st   = await get_socket_token(client, bob)
+    alice_st = await get_socket_token(ws_client, alice)
+    bob_st   = await get_socket_token(ws_client, bob)
 
     # Alice connects and sends a transmission
-    async with aconnect_ws(f"/ws/channels/{sid}?token={alice_st}", client) as ws_alice:
+    async with aconnect_ws(f"/ws/channels/{sid}?token={alice_st}", ws_client) as ws_alice:
         await ws_alice.send_text(json.dumps({"op": "transmission", "content": "test message"}))
         raw = await ws_alice.receive_text()
         msg = json.loads(raw)
@@ -47,7 +53,7 @@ async def test_ws_connect_and_whisper_roundtrip(client, make_token, db_session):
         assert msg["content"] == "test message"
 
     # Bob connects and sends a transmission
-    async with aconnect_ws(f"/ws/channels/{sid}?token={bob_st}", client) as ws_bob:
+    async with aconnect_ws(f"/ws/channels/{sid}?token={bob_st}", ws_client) as ws_bob:
         await ws_bob.send_text(json.dumps({"op": "transmission", "content": "bob message"}))
         raw = await ws_bob.receive_text()
         msg = json.loads(raw)
