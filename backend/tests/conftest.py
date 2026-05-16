@@ -17,8 +17,7 @@ from collections.abc import AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
-from httpx_ws.transport import ASGIWebSocketTransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.postgres import PostgresContainer
@@ -92,7 +91,7 @@ def db_session(db_engine) -> Generator[Session, None, None]:
 @pytest_asyncio.fixture()
 async def client(db_session) -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(
-        transport=ASGIWebSocketTransport(app=app),
+        transport=ASGITransport(app=app),
         base_url="http://test",
     ) as ac:
         yield ac
