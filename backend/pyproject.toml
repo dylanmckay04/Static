@@ -48,6 +48,7 @@ exclude = ["tests*", "alembic*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 
 [tool.uv.sources]
