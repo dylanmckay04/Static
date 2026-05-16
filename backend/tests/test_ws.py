@@ -32,17 +32,17 @@ async def test_ws_connect_and_whisper_roundtrip(make_token, db_session):
         alice = await make_token("ws_alice@test.com")
         bob   = await make_token("ws_bob@test.com")
 
-    # Create channel as alice (controller)
-    r = await ws_client.post("/channels", json={"name": "WS Test Room"}, headers=auth(alice))
-    assert r.status_code == 201
-    sid = r.json()["id"]
+        # Create channel as alice (controller)
+        r = await ws_client.post("/channels", json={"name": "WS Test Room"}, headers=auth(alice))
+        assert r.status_code == 201
+        sid = r.json()["id"]
 
-    # Bob enters via REST
-    await ws_client.post(f"/channels/{sid}/enter", headers=auth(bob))
+        # Bob enters via REST
+        await ws_client.post(f"/channels/{sid}/enter", headers=auth(bob))
 
-    # Get socket tokens
-    alice_st = await get_socket_token(ws_client, alice)
-    bob_st   = await get_socket_token(ws_client, bob)
+        # Get socket tokens
+        alice_st = await get_socket_token(ws_client, alice)
+        bob_st   = await get_socket_token(ws_client, bob)
 
     # Alice connects and sends a transmission
     async with aconnect_ws(f"/ws/channels/{sid}?token={alice_st}", ws_client) as ws_alice:
