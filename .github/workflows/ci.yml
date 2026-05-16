@@ -24,6 +24,7 @@ jobs:
         run: uv sync
 
       - name: Run tests
+        timeout-minutes: 5
         working-directory: backend
         env:
           TESTING: "1"
@@ -31,4 +32,4 @@ jobs:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/static_test"
           REDIS_URL: "redis://localhost:6379"
           TESTCONTAINERS_RYUK_DISABLED: "true"
-        run: TESTING=1 uv run pytest -v
+        run: TESTING=1 uv run pytest -v --timeout=60
