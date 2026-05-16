@@ -52,3 +52,8 @@ asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 
 [tool.uv.sources]
+
+[dependency-groups]
+dev = [
+    "pytest-timeout>=2.4.0",
+]
