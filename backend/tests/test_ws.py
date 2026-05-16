@@ -44,21 +44,21 @@ async def test_ws_connect_and_whisper_roundtrip(make_token, db_session):
         alice_st = await get_socket_token(ws_client, alice)
         bob_st   = await get_socket_token(ws_client, bob)
 
-    # Alice connects and sends a transmission
-    async with aconnect_ws(f"/ws/channels/{sid}?token={alice_st}", ws_client) as ws_alice:
-        await ws_alice.send_text(json.dumps({"op": "transmission", "content": "test message"}))
-        raw = await ws_alice.receive_text()
-        msg = json.loads(raw)
-        assert msg["op"] == "transmission"
-        assert msg["content"] == "test message"
+        # Alice connects and sends a transmission
+        async with aconnect_ws(f"/ws/channels/{sid}?token={alice_st}", ws_client) as ws_alice:
+            await ws_alice.send_text(json.dumps({"op": "transmission", "content": "test message"}))
+            raw = await ws_alice.receive_text()
+            msg = json.loads(raw)
+            assert msg["op"] == "transmission"
+            assert msg["content"] == "test message"
 
-    # Bob connects and sends a transmission
-    async with aconnect_ws(f"/ws/channels/{sid}?token={bob_st}", ws_client) as ws_bob:
-        await ws_bob.send_text(json.dumps({"op": "transmission", "content": "bob message"}))
-        raw = await ws_bob.receive_text()
-        msg = json.loads(raw)
-        assert msg["op"] == "transmission"
-        assert msg["content"] == "bob message"
+        # Bob connects and sends a transmission
+        async with aconnect_ws(f"/ws/channels/{sid}?token={bob_st}", ws_client) as ws_bob:
+            await ws_bob.send_text(json.dumps({"op": "transmission", "content": "bob message"}))
+            raw = await ws_bob.receive_text()
+            msg = json.loads(raw)
+            assert msg["op"] == "transmission"
+            assert msg["content"] == "bob message"
 
 
 @pytest.mark.asyncio
