@@ -30,4 +30,5 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/static_test"
           REDIS_URL: "redis://localhost:6379"
+          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: TESTING=1 uv run pytest -v
