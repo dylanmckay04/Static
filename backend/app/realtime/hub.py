@@ -3,16 +3,16 @@
 Architecture
 ------------
 Local registry (this module)
-  dict[seance_id, set[WebSocket]] -- sockets connected to *this* worker.
+  dict[channel_id, set[WebSocket]] -- sockets connected to *this* worker.
 
 Publish path (hub.broadcast)
-  Serialize payload -> redis.publish("seance:{id}", json)
+  Serialize payload -> redis.publish("channel:{id}", json)
   Redis delivers the message to every worker that has subscribed.
 
 Subscribe path (start_subscriber -- one task per worker)
-  psubscribe("seance:*") -> on each pmessage, extract seance_id from the
+  psubscribe("channel:*") -> on each pmessage, extract channel_id from the
   channel name and call hub._fan_out_local to push the raw string to every
-  local WebSocket in that seance.
+  local WebSocket in that channel.
 
 This means N uvicorn workers behave identically to 1: a Whisper created on
 worker A is received by worker B's subscriber and delivered to B's clients
@@ -35,7 +35,7 @@ from app.services.redis import redis_client
 
 logger = logging.getLogger(__name__)
 
-_CHANNEL_PREFIX = "seance:"
+_CHANNEL_PREFIX = "channel:"
 
 
 class ConnectionHub:
@@ -48,42 +48,42 @@ class ConnectionHub:
     # Registration
     # ------------------------------------------------------------------
 
-    def register(self, seance_id: int, ws: WebSocket) -> None:
-        """Track *ws* as a live connection inside *seance_id*."""
-        self._rooms[seance_id].add(ws)
-        logger.debug("hub.register  seance=%d  local_total=%d", seance_id, len(self._rooms[seance_id]))
+    def register(self, channel_id: int, ws: WebSocket) -> None:
+        """Track *ws* as a live connection inside *channel_id*."""
+        self._rooms[channel_id].add(ws)
+        logger.debug("hub.register  channel=%d  local_total=%d", channel_id, len(self._rooms[channel_id]))
 
-    def unregister(self, seance_id: int, ws: WebSocket) -> None:
+    def unregister(self, channel_id: int, ws: WebSocket) -> None:
         """Remove *ws*; prunes the bucket when it becomes empty."""
-        self._rooms[seance_id].discard(ws)
-        if not self._rooms[seance_id]:
-            self._rooms.pop(seance_id, None)
-        logger.debug("hub.unregister seance=%d", seance_id)
+        self._rooms[channel_id].discard(ws)
+        if not self._rooms[channel_id]:
+            self._rooms.pop(channel_id, None)
+        logger.debug("hub.unregister channel=%d", channel_id)
 
     # ------------------------------------------------------------------
     # Broadcast (publish to Redis -> all workers -> local fan-out)
     # ------------------------------------------------------------------
 
-    async def broadcast(self, seance_id: int, payload: dict) -> None:
-        """Publish *payload* to every worker connected to *seance_id*.
+    async def broadcast(self, channel_id: int, payload: dict) -> None:
+        """Publish *payload* to every worker connected to *channel_id*.
 
-        Serialises to JSON and publishes on ``seance:{seance_id}``. The
+        Serialises to JSON and publishes on ``channel:{channel_id}``. The
         subscriber loop running in *every* worker (including this one) will
         receive the message and call ``_fan_out_local``.
         """
         message = json.dumps(payload, default=str)
-        await redis_client.publish(f"{_CHANNEL_PREFIX}{seance_id}", message)
+        await redis_client.publish(f"{_CHANNEL_PREFIX}{channel_id}", message)
 
     # ------------------------------------------------------------------
     # Local delivery (called by the subscriber loop)
     # ------------------------------------------------------------------
 
-    async def _fan_out_local(self, seance_id: int, message: str) -> None:
-        """Send an already-serialised message to every local socket in *seance_id*.
+    async def _fan_out_local(self, channel_id: int, message: str) -> None:
+        """Send an already-serialised message to every local socket in *channel_id*.
 
         Dead sockets are pruned on the fly.
         """
-        connections = list(self._rooms.get(seance_id, set()))
+        connections = list(self._rooms.get(channel_id, set()))
         if not connections:
             return
 
@@ -93,12 +93,12 @@ class ConnectionHub:
                 await ws.send_text(message)
             except Exception:
                 logger.warning(
-                    "Stale WebSocket during fan-out (seance=%d); removing.", seance_id
+                    "Stale WebSocket during fan-out (channel=%d); removing.", channel_id
                 )
                 dead.append(ws)
 
         for ws in dead:
-            self.unregister(seance_id, ws)
+            self.unregister(channel_id, ws)
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +112,7 @@ hub = ConnectionHub()
 # ---------------------------------------------------------------------------
 
 async def start_subscriber() -> None:
-    """Subscribe to all seance channels and fan out messages to local sockets.
+    """Subscribe to all channels and fan out messages to local sockets.
 
     Runs as a long-lived asyncio task started in the app lifespan. Reconnects
     automatically after any Redis error; cancellation (on shutdown) propagates
@@ -134,14 +134,14 @@ async def start_subscriber() -> None:
 
                 channel: str = message["channel"]
                 try:
-                    seance_id = int(channel[len(_CHANNEL_PREFIX):])
+                    channel_id = int(channel[len(_CHANNEL_PREFIX):])
                 except (ValueError, IndexError):
                     logger.warning(
                         "Subscriber: unexpected channel %r -- skipping", channel
                     )
                     continue
 
-                await hub._fan_out_local(seance_id, message["data"])
+                await hub._fan_out_local(channel_id, message["data"])
 
         except asyncio.CancelledError:
             logger.info("Redis subscriber task cancelled -- shutting down")
