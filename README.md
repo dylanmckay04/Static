@@ -10,7 +10,7 @@ Static is a full-stack chat platform where operators communicate over named chan
 Built to demonstrate production-grade backend patterns: WebSocket fan-out over Redis pub/sub, dual-token JWT authentication, GitHub OAuth with account linking, per-user rate limiting via Redis Lua scripts, one-time-use socket tokens, and a soft-deleted audit trail — all behind a purpose-built shortwave-radio UI.
 
 - Live app: https://static-eight-sepia.vercel.app/
-- Live API docs: https://veil-api-production-bd4e.up.railway.app/docs
+- Live API docs: https://static-production-2244.up.railway.app/docs
 
 ---
 
