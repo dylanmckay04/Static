@@ -4,6 +4,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from prometheus_fastapi_instrumentator import Instrumentator
 
 import sqlalchemy
 from fastapi import FastAPI, Request
@@ -14,6 +15,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.limiter import limiter
+from app.core.metrics import TRANSMISSIONS_PRUNED_TOTAL
 from app.database import SessionLocal, engine
 from app.realtime.hub import start_subscriber
 from app.routers import auth, debug, channels, transmissions, ws
@@ -82,6 +84,7 @@ async def _prune_expired_transmissions() -> None:
                     total_pruned += result
                 if total_pruned:
                     db.commit()
+                    TRANSMISSIONS_PRUNED_TOTAL.inc(total_pruned)
                     logger.info("Pruned %d expired transmissions", total_pruned)
             except Exception:
                 logger.exception("Error during transmission pruning pass")
@@ -119,6 +122,12 @@ app = FastAPI(
     version="0.5.0",
     lifespan=lifespan,
 )
+
+Instrumentator(
+    should_group_status_codes=True,        # 200/201 -> "2xx" keeps cardinality low
+    should_ignore_untemplated=True,        # don't create series for 404 path scans
+    excluded_handlers=["/metrics"],        # the scrape must not count itself
+).instrument(app).expose(app, include_in_schema=False)
 
 
 def custom_openapi():

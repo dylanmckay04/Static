@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_operator, get_db
 from app.core.limiter import limiter
+from app.core.metrics import SOCKET_TOKENS_TOTAL
 from app.models.operator import Operator
 from app.schemas.auth import GitHubCallbackRequest, GitHubLoginURLResponse, GoogleCallbackRequest, GoogleLoginURLResponse, LoginRequest, SocketTokenResponse, TokenResponse
 from app.schemas.operator import OperatorCreate, OperatorResponse
 from app.services.auth_service import issue_socket_token, login_operator, register_operator
 from app.services.github_service import generate_github_login_url, github_callback
 from app.services.google_service import generate_google_login_url, google_callback
+
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -75,4 +77,5 @@ async def get_socket_token(
     current_operator: Operator = Depends(get_current_operator),
 ):
     token, jti = await issue_socket_token(current_operator)
+    SOCKET_TOKENS_TOTAL.labels(event="minted").inc()
     return SocketTokenResponse(socket_token=token, jti=jti)

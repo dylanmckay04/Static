@@ -32,6 +32,7 @@ from collections import defaultdict
 from fastapi import WebSocket
 
 from app.services.redis import redis_client
+from app.core.metrics import BROADCAST_DURATION_SECONDS, WS_CONNECTIONS_ACTIVE
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +52,13 @@ class ConnectionHub:
     def register(self, channel_id: int, ws: WebSocket) -> None:
         """Track *ws* as a live connection inside *channel_id*."""
         self._rooms[channel_id].add(ws)
+        WS_CONNECTIONS_ACTIVE.inc()
         logger.debug("hub.register  channel=%d  local_total=%d", channel_id, len(self._rooms[channel_id]))
 
     def unregister(self, channel_id: int, ws: WebSocket) -> None:
         """Remove *ws*; prunes the bucket when it becomes empty."""
+        if ws in self._rooms.get(channel_id, set()):
+            WS_CONNECTIONS_ACTIVE.dec()
         self._rooms[channel_id].discard(ws)
         if not self._rooms[channel_id]:
             self._rooms.pop(channel_id, None)
@@ -71,8 +75,9 @@ class ConnectionHub:
         subscriber loop running in *every* worker (including this one) will
         receive the message and call ``_fan_out_local``.
         """
-        message = json.dumps(payload, default=str)
-        await redis_client.publish(f"{_CHANNEL_PREFIX}{channel_id}", message)
+        with BROADCAST_DURATION_SECONDS.time():
+            message = json.dumps(payload, default=str)
+            await redis_client.publish(f"{_CHANNEL_PREFIX}{channel_id}", message)
 
     # ------------------------------------------------------------------
     # Local delivery (called by the subscriber loop)

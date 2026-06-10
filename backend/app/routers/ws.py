@@ -46,6 +46,13 @@ from app.schemas.transmission import TransmissionResponse
 from app.services import transmission_service
 from app.services.redis import redis_client
 
+from app.core.metrics import (
+    SOCKET_TOKENS_TOTAL,
+    TRANSMISSIONS_TOTAL,
+    WS_CONNECTS_TOTAL,
+    WS_RATE_LIMITED_TOTAL,
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["realtime"])
@@ -109,19 +116,26 @@ async def channel_ws(
     if payload is None:
         await websocket.accept()
         await websocket.close(code=_CLOSE_UNAUTHORIZED, reason="Invalid or expired token")
+        WS_CONNECTS_TOTAL.labels(result="unauthorized").inc()
+        SOCKET_TOKENS_TOTAL.labels(event="rejected").inc()
         return
 
     jti = payload.get("jti")
     if not jti:
         await websocket.accept()
         await websocket.close(code=_CLOSE_UNAUTHORIZED, reason="Malformed token: missing jti")
+        WS_CONNECTS_TOTAL.labels(result="unauthorized").inc()
+        SOCKET_TOKENS_TOTAL.labels(event="rejected").inc()
         return
 
     # 2. Atomically consume JTI
     consumed = await redis_client.getdel(f"socket_jti:{jti}")
+    SOCKET_TOKENS_TOTAL.labels(event="consumed").inc()
     if consumed is None:
         await websocket.accept()
         await websocket.close(code=_CLOSE_UNAUTHORIZED, reason="Token already used or expired")
+        WS_CONNECTS_TOTAL.labels(result="unauthorized").inc()
+        SOCKET_TOKENS_TOTAL.labels(event="rejected").inc()
         return
 
     # 3. Resolve Operator
@@ -130,12 +144,14 @@ async def channel_ws(
     except (KeyError, TypeError, ValueError):
         await websocket.accept()
         await websocket.close(code=_CLOSE_UNAUTHORIZED, reason="Malformed token: bad sub")
+        WS_CONNECTS_TOTAL.labels(result="unauthorized").inc()
         return
 
     operator = db.query(Operator).filter(Operator.id == operator_id).first()
     if operator is None:
         await websocket.accept()
         await websocket.close(code=_CLOSE_UNAUTHORIZED, reason="Operator not found")
+        WS_CONNECTS_TOTAL.labels(result="unauthorized").inc()
         return
 
     # 4. Contact check
@@ -147,12 +163,14 @@ async def channel_ws(
     if contact is None:
         await websocket.accept()
         await websocket.close(code=_CLOSE_FORBIDDEN, reason="You are not in this channel")
+        WS_CONNECTS_TOTAL.labels(result="forbidden").inc()
         return
 
     callsign = contact.callsign
 
     # 5. Accept and register
     await websocket.accept()
+    WS_CONNECTS_TOTAL.labels(result="accepted").inc()
     hub.register(channel_id, websocket)
     logger.info("WS connected  channel=%d callsign=%r", channel_id, callsign)
 
@@ -177,6 +195,7 @@ async def channel_ws(
 
                 allowed = await _consume_token(channel_id, operator_id)
                 if not allowed:
+                    WS_RATE_LIMITED_TOTAL.inc()
                     await websocket.send_json({"op": "error", "detail": "You are speaking too quickly. Slow down."})
                     continue
 
@@ -189,7 +208,7 @@ async def channel_ws(
                     logger.warning("create_transmission failed: %s", exc)
                     await websocket.send_json({"op": "error", "detail": str(exc)})
                     continue
-
+                WS_CONNECTS_TOTAL.labels(result="accepted").inc()
                 response = TransmissionResponse.from_orm_redacted(transmission)
                 await hub.broadcast(channel_id, {"op": "transmission", **response.model_dump(mode="json")})
 

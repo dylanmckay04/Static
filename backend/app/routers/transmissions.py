@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_operator, get_db
 from app.core.limiter import limiter
+from app.core.metrics import TRANSMISSIONS_TOTAL
 from app.models.operator import Operator
 from app.realtime.hub import hub
 from app.schemas.transmission import TransmissionCreate, TransmissionPage, TransmissionResponse
@@ -19,6 +20,7 @@ async def send_transmission(
     current_operator: Operator = Depends(get_current_operator),
 ):
     transmission = transmission_service.create_transmission(channel_id, current_operator, payload.content, db)
+    TRANSMISSIONS_TOTAL.labels(source="http").inc()
     response = TransmissionResponse.from_orm_redacted(transmission)
     await hub.broadcast(channel_id, {"op": "transmission", **response.model_dump(mode="json")})
     return response
