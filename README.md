@@ -5,9 +5,9 @@
 
 **Anonymous, real-time messaging through ephemeral callsigns.**
 
-Static is a full-stack chat platform where operators communicate over named channels under randomly-generated callsigns. No usernames appear inside a channel — only the callsign assigned when you tuned in. Leave and re-enter, and you broadcast under a new identity entirely.
+Static is a full-stack chat platform where operators communicate over named channels under randomly-generated callsigns. No usernames appear inside a channel - only the callsign assigned when you tuned in. Leave and re-enter, and you broadcast under a new identity entirely.
 
-Built to demonstrate production-grade backend patterns: WebSocket fan-out over Redis pub/sub, dual-token JWT authentication, GitHub OAuth with account linking, per-user rate limiting via Redis Lua scripts, one-time-use socket tokens, and a soft-deleted audit trail — all behind a purpose-built shortwave-radio UI.
+Built to demonstrate production-grade backend patterns: WebSocket fan-out over Redis pub/sub, dual-token JWT authentication, GitHub OAuth with account linking, per-user rate limiting via Redis Lua scripts, one-time-use socket tokens, a soft-deleted audit trail, and full Prometheus/Grafana observability - all behind a purpose-built shortwave-radio UI.
 
 - Live app: https://static-eight-sepia.vercel.app/
 - Live API docs: https://static-production-2244.up.railway.app/docs
@@ -32,6 +32,7 @@ Built to demonstrate production-grade backend patterns: WebSocket fan-out over R
   - [Callsign Renderer](#callsign-renderer)
   - [Sound Engine](#sound-engine)
 - [Database Schema](#database-schema)
+- [Observability](#observability)
 - [Getting Started](#getting-started)
 - [Configuration](#configuration)
 - [Testing](#testing)
@@ -44,14 +45,15 @@ Built to demonstrate production-grade backend patterns: WebSocket fan-out over R
 |---------|-------------|
 | **GitHub OAuth** | Sign up or sign in with GitHub; existing email accounts are linked automatically |
 | **Channels** | Public or encrypted (cipher-key-only) chat rooms |
-| **Ephemeral Callsigns** | Random pseudonyms per channel entry — identity resets on re-entry |
+| **Ephemeral Callsigns** | Random pseudonyms per channel entry - identity resets on re-entry |
 | **Real-time Messaging** | WebSocket with exponential backoff reconnection and backfill |
 | **Encrypted Channels** | Controller-issued, single-use JWT cipher keys for private channels |
 | **Controller Controls** | Role system (controller / relay / listener), kick, promote, transfer control |
 | **Transmission Redaction** | Controller/relay soft-delete with content sentinel; audit trail preserved |
 | **Transmission TTL** | Per-channel message expiration with a background pruning task |
 | **Sound Design** | Ambient carrier tone + event sounds synthesised entirely via Web Audio API |
-| **Identity Isolation** | Operator ID and email are never exposed inside a channel — callsign only |
+| **Identity Isolation** | Operator ID and email are never exposed inside a channel - callsign only |
+| **Observability** | Prometheus metrics (HTTP + WebSocket + domain events) with an auto-provisioned Grafana dashboard |
 
 ---
 
@@ -65,6 +67,7 @@ Built to demonstrate production-grade backend patterns: WebSocket fan-out over R
 - [python-jose](https://github.com/mpdavis/python-jose) - JWT (HS256)
 - [bcrypt](https://pypi.org/project/bcrypt/) - password hashing (with SHA-256 pre-hash)
 - [slowapi](https://github.com/laurentS/slowapi) - HTTP rate limiting
+- [prometheus-client](https://github.com/prometheus/client_python) + [prometheus-fastapi-instrumentator](https://github.com/trallnag/prometheus-fastapi-instrumentator) - metrics export at `/metrics`
 - [httpx](https://www.python-httpx.org/) - async HTTP client for GitHub OAuth API calls
 - [uv](https://github.com/astral-sh/uv) - fast Python package manager
 - Python 3.13
@@ -77,7 +80,9 @@ Built to demonstrate production-grade backend patterns: WebSocket fan-out over R
 - Custom WebSocket hook - reconnection, backfill, token lifecycle
 
 **Infrastructure**
-- Docker Compose - Postgres 16, Redis 7, API, Frontend
+- Docker Compose - Postgres 16, Redis 7, API, Frontend, Prometheus, Grafana
+- [Prometheus](https://prometheus.io/) - metrics scraping and storage (7-day retention)
+- [Grafana](https://grafana.com/) - dashboards, fully provisioned from version control
 - [testcontainers](https://testcontainers.com/) + [fakeredis](https://github.com/cunla/fakeredis-py) - isolated integration tests
 
 ---
@@ -121,7 +126,7 @@ Built to demonstrate production-grade backend patterns: WebSocket fan-out over R
 └─────────────────┘
 ```
 
-**Multi-worker fan-out:** The hub publishes every broadcast to a Redis channel (`channel:{id}`). A background subscriber task on each worker re-fans published messages to its locally-registered WebSockets. This means the application scales horizontally — a transmission sent through worker A reaches clients connected to worker B.
+**Multi-worker fan-out:** The hub publishes every broadcast to a Redis channel (`channel:{id}`). A background subscriber task on each worker re-fans published messages to its locally-registered WebSockets. This means the application scales horizontally - a transmission sent through worker A reaches clients connected to worker B.
 
 ---
 
@@ -144,7 +149,7 @@ The codebase uses a consistent vocabulary throughout:
 **Layer structure:**
 
 ```
-routers/     HTTP boundary — thin, delegates to services
+routers/     HTTP boundary - thin, delegates to services
 services/    Business logic; all access control decisions live here
 models/      SQLAlchemy ORM (Operator, Channel, Contact, Transmission, CipherKey)
 schemas/     Pydantic request/response models
@@ -160,24 +165,24 @@ Static uses **three distinct JWT token types**, each with different lifetimes an
 
 Operators can create an account or sign in using GitHub. The flow is handled by `services/github_service.py`:
 
-1. **Initiate** — `GET /auth/github` generates a cryptographically random state token, stores it in Redis with a 10-minute TTL, and returns a GitHub authorization URL.
-2. **Redirect** — The client navigates to GitHub's authorization page (scope: `user:email`).
-3. **Callback** — GitHub redirects to the frontend at `/auth/callback?code=...&state=...`. The frontend POSTs these to `POST /auth/github/callback`.
-4. **State validation** — The server atomically deletes the state from Redis (`GETDEL`). An absent or mismatched state is rejected.
-5. **Code exchange** — The server exchanges the code for a GitHub access token.
-6. **User fetch** — The server calls `/user` (and `/user/emails` as a fallback for private emails) to obtain the verified primary email and GitHub user ID.
-7. **Account linking** — Three-way lookup:
+1. **Initiate** - `GET /auth/github` generates a cryptographically random state token, stores it in Redis with a 10-minute TTL, and returns a GitHub authorization URL.
+2. **Redirect** - The client navigates to GitHub's authorization page (scope: `user:email`).
+3. **Callback** - GitHub redirects to the frontend at `/auth/callback?code=...&state=...`. The frontend POSTs these to `POST /auth/github/callback`.
+4. **State validation** - The server atomically deletes the state from Redis (`GETDEL`). An absent or mismatched state is rejected.
+5. **Code exchange** - The server exchanges the code for a GitHub access token.
+6. **User fetch** - The server calls `/user` (and `/user/emails` as a fallback for private emails) to obtain the verified primary email and GitHub user ID.
+7. **Account linking** - Three-way lookup:
    - Existing Operator with this `github_id` → return it.
    - Existing Operator with this email → link `github_id` to that account, return it.
    - No match → create a new Operator with `github_id` and email (no password set).
-8. **Token issuance** — A standard 24-hour JWT access token is returned to the client.
+8. **Token issuance** - A standard 24-hour JWT access token is returned to the client.
 
 Accounts created via GitHub have a `NULL` `hashed_password`. They can only authenticate via GitHub OAuth.
 
 The frontend preserves any pending cipher key (stored in `sessionStorage`) through the OAuth redirect so that encrypted-channel invitations survive the login flow.
 
 #### Access Token (24h)
-Standard Bearer token for all HTTP endpoints. Issued on login or OAuth callback, stored in `localStorage`. The `type` claim is validated on every decode — a cipher or socket token cannot be replayed as an access token.
+Standard Bearer token for all HTTP endpoints. Issued on login or OAuth callback, stored in `localStorage`. The `type` claim is validated on every decode - a cipher or socket token cannot be replayed as an access token.
 
 ```
 POST /auth/login  →  { access_token: "eyJ..." }
@@ -206,7 +211,7 @@ POST /channels/join?token=<cipher_key_token>
 ```
 
 #### Password Hashing
-Passwords are **SHA-256 pre-hashed** before bcrypt to neutralise bcrypt's 72-byte truncation vulnerability — a long passphrase will never silently collide with a shorter one.
+Passwords are **SHA-256 pre-hashed** before bcrypt to neutralise bcrypt's 72-byte truncation vulnerability - a long passphrase will never silently collide with a shorter one.
 
 ```python
 def hash_password(password: str) -> str:
@@ -250,20 +255,20 @@ Authentication and contact are verified before the connection is accepted. Auth/
 { "op": "error", "detail": "You are speaking too quickly. Slow down." }
 ```
 
-**Reconnection strategy (client):** Exponential backoff — `500ms × 2ⁿ`, capped at 30 seconds, maximum 8 retries. On each reconnect the client requests a new socket token and backfills missed transmissions using the highest transmission ID seen before disconnect. Close codes `4001`/`4003` suppress reconnection entirely.
+**Reconnection strategy (client):** Exponential backoff - `500ms × 2ⁿ`, capped at 30 seconds, maximum 8 retries. On each reconnect the client requests a new socket token and backfills missed transmissions using the highest transmission ID seen before disconnect. Close codes `4001`/`4003` suppress reconnection entirely.
 
 ### Rate Limiting
 
 Two independent layers of rate limiting:
 
-**HTTP (slowapi)** — per-IP, per-endpoint limits enforced at the router layer. Examples:
-- `POST /auth/login` — 20/minute
-- `GET /auth/github` — 20/minute
-- `POST /auth/github/callback` — 20/minute
-- `POST /channels/{id}/enter` — 30/minute
-- `GET /channels` — 60/minute
+**HTTP (slowapi)** - per-IP, per-endpoint limits enforced at the router layer. Examples:
+- `POST /auth/login` - 20/minute
+- `GET /auth/github` - 20/minute
+- `POST /auth/github/callback` - 20/minute
+- `POST /channels/{id}/enter` - 30/minute
+- `GET /channels` - 60/minute
 
-**WebSocket (Redis token bucket)** — per-Operator per-Channel, implemented as a Lua script executed atomically in Redis:
+**WebSocket (Redis token bucket)** - per-Operator per-Channel, implemented as a Lua script executed atomically in Redis:
 
 ```lua
 -- KEYS[1] = wsbucket:{channel_id}:{operator_id}
@@ -275,7 +280,7 @@ tokens = tokens - 1
 return 1
 ```
 
-Rate-limited transmissions receive an `error` frame; the WebSocket is not closed. The Lua script executes atomically — no race conditions across concurrent requests.
+Rate-limited transmissions receive an `error` frame; the WebSocket is not closed. The Lua script executes atomically - no race conditions across concurrent requests.
 
 ### Real-time Hub
 
@@ -299,10 +304,10 @@ await hub.broadcast(channel_id, {"op": "transmission", ...})
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/auth/register` | — | Create a new Operator account (email + password) |
-| `POST` | `/auth/login` | — | Authenticate with email/password; receive an access token |
-| `GET` | `/auth/github` | — | Initiate GitHub OAuth; returns authorization URL and state token |
-| `POST` | `/auth/github/callback` | — | Exchange GitHub code + state for a JWT access token |
+| `POST` | `/auth/register` | - | Create a new Operator account (email + password) |
+| `POST` | `/auth/login` | - | Authenticate with email/password; receive an access token |
+| `GET` | `/auth/github` | - | Initiate GitHub OAuth; returns authorization URL and state token |
+| `POST` | `/auth/github/callback` | - | Exchange GitHub code + state for a JWT access token |
 | `POST` | `/auth/socket-token` | Bearer | Mint a one-time 60s WebSocket token |
 
 </details>
@@ -370,7 +375,7 @@ await hub.broadcast(channel_id, {"op": "transmission", ...})
 
 ### State Management
 
-Authentication state is held in a **React Context** backed by `localStorage`, with no external state library. The pattern is intentionally minimal — the only global state is the JWT access token.
+Authentication state is held in a **React Context** backed by `localStorage`, with no external state library. The pattern is intentionally minimal - the only global state is the JWT access token.
 
 ```typescript
 // src/store/auth.tsx
@@ -389,7 +394,7 @@ Token is persisted under the key `static:token`. All API calls thread the token 
 |-------|-----------|:-------------:|-------------|
 | `/login` | `LoginPage` | No | Email/password login or "Sign in with GitHub" |
 | `/register` | `RegisterPage` | No | Email/password registration or "Continue with GitHub" |
-| `/auth/callback` | `GitHubCallbackPage` | No | GitHub OAuth callback — exchanges code for JWT |
+| `/auth/callback` | `GitHubCallbackPage` | No | GitHub OAuth callback - exchanges code for JWT |
 | `/lobby` | `LobbyPage` | Yes | Channel browser; create new channels |
 | `/channels/:id` | `RoomPage` | Yes | Live channel messaging interface |
 | `/invite` | `InvitePage` | Optional* | Join an encrypted channel via cipher key |
@@ -400,12 +405,12 @@ Token is persisted under the key `static:token`. All API calls thread the token 
 
 `src/lib/useChannelSocket.ts` encapsulates the full WebSocket lifecycle:
 
-1. **Token acquisition** — fetches a one-shot socket token via `POST /auth/socket-token`
-2. **Connection** — opens `ws://…/ws/channels/{id}?token=<socket_token>`
-3. **Message dispatch** — calls `onMessage(msg: WsMessage)` for each valid frame
-4. **Reconnection** — on unexpected close, schedules reconnect with exponential backoff (`500ms × 2ⁿ`, cap 30s, max 8 retries); `4001`/`4003` close codes suppress reconnection
-5. **Backfill** — on reconnect, calls `onReconnect(lastSeenTransmissionId)` so the page can fetch missed transmissions
-6. **Cleanup** — closes the socket with code `1000` on unmount
+1. **Token acquisition** - fetches a one-shot socket token via `POST /auth/socket-token`
+2. **Connection** - opens `ws://…/ws/channels/{id}?token=<socket_token>`
+3. **Message dispatch** - calls `onMessage(msg: WsMessage)` for each valid frame
+4. **Reconnection** - on unexpected close, schedules reconnect with exponential backoff (`500ms × 2ⁿ`, cap 30s, max 8 retries); `4001`/`4003` close codes suppress reconnection
+5. **Backfill** - on reconnect, calls `onReconnect(lastSeenTransmissionId)` so the page can fetch missed transmissions
+6. **Cleanup** - closes the socket with code `1000` on unmount
 
 ```typescript
 const { wsStatus, sendTransmission } = useChannelSocket({
@@ -417,7 +422,7 @@ const { wsStatus, sendTransmission } = useChannelSocket({
 })
 ```
 
-`wsStatus` surfaces as `'connecting' | 'connected' | 'reconnecting' | 'dead'` — the UI reflects each state visually.
+`wsStatus` surfaces as `'connecting' | 'connected' | 'reconnecting' | 'dead'` - the UI reflects each state visually.
 
 ### Callsign Renderer
 
@@ -426,13 +431,13 @@ const { wsStatus, sendTransmission } = useChannelSocket({
 **Algorithm:**
 1. Hash the callsign string with FNV-1a to produce a seed
 2. Run a seeded LCG (linear congruential generator) for reproducible randomness
-3. Pick a shape (circle, triangle, pentagon, hexagon), 1–2 signal-pattern glyphs from a 20-glyph alphabet, 3–6 perimeter accent dots, and one of 5 amber colour shades — all deterministically from the seed
+3. Pick a shape (circle, triangle, pentagon, hexagon), 1–2 signal-pattern glyphs from a 20-glyph alphabet, 3–6 perimeter accent dots, and one of 5 amber colour shades - all deterministically from the seed
 
 The same callsign always renders identically across sessions and devices with no database lookup or image storage.
 
 ### Sound Engine
 
-`src/lib/sounds.ts` synthesises all audio at runtime using the Web Audio API — no audio files are bundled or fetched.
+`src/lib/sounds.ts` synthesises all audio at runtime using the Web Audio API - no audio files are bundled or fetched.
 
 | Sound | Implementation |
 |-------|---------------|
@@ -495,11 +500,51 @@ cipher_keys
 ```
 
 **Key design decisions:**
-- **Nullable `hashed_password`** — operators created via GitHub OAuth have no password; they authenticate exclusively through the OAuth flow
-- **Composite PK on contacts** — `(operator_id, channel_id)` enforces one active contact per operator per channel at the database level
-- **Callsign snapshotted on transmissions** — preserves message attribution even after a contact is deleted (operator departs)
-- **Soft-delete on transmissions** — `deleted_at` instead of hard `DELETE`; content is replaced with a sentinel string in API responses but the row is retained for audit
-- **Unique `(channel_id, callsign)`** — collision resistance enforced by the database; `assign_contact()` retries up to 8 times on `IntegrityError` before failing with `503`
+- **Nullable `hashed_password`** - operators created via GitHub OAuth have no password; they authenticate exclusively through the OAuth flow
+- **Composite PK on contacts** - `(operator_id, channel_id)` enforces one active contact per operator per channel at the database level
+- **Callsign snapshotted on transmissions** - preserves message attribution even after a contact is deleted (operator departs)
+- **Soft-delete on transmissions** - `deleted_at` instead of hard `DELETE`; content is replaced with a sentinel string in API responses but the row is retained for audit
+- **Unique `(channel_id, callsign)`** - collision resistance enforced by the database; `assign_contact()` retries up to 8 times on `IntegrityError` before failing with `503`
+
+---
+
+## Observability
+
+The stack ships with full Prometheus/Grafana instrumentation. `docker compose up` brings up Prometheus (scraping the API every 15 seconds) and Grafana with a datasource and dashboard provisioned entirely from version control - open Grafana and the **Static - API Overview** dashboard is already there.
+
+```
+┌─────────────┐   PromQL    ┌──────────────┐   scrape /metrics (15s)
+│   Grafana   │ ──────────► │  Prometheus  │ ───────────────────────► FastAPI :8000/metrics
+│   (:3000)   │             │   (:9090)    │
+└─────────────┘             └──────────────┘
+```
+
+Metrics come from two layers:
+
+**HTTP layer** - [prometheus-fastapi-instrumentator](https://github.com/trallnag/prometheus-fastapi-instrumentator) auto-instruments every route with request counts, latency histograms, and payload sizes. Status codes are grouped (`2xx`/`4xx`/`5xx`) and untemplated paths are ignored, so bots scanning `/wp-admin.php` can't mint new time series.
+
+**Domain layer** - custom metrics in `app/core/metrics.py` cover what HTTP middleware can't see:
+
+| Metric | Type | What it answers |
+|--------|------|-----------------|
+| `static_ws_connections_active` | Gauge | How many sockets are live right now? |
+| `static_ws_connects_total{result}` | Counter | Are connections being accepted, or failing auth (`4001`) / contact checks (`4003`)? |
+| `static_transmissions_total{source}` | Counter | Is traffic arriving over WebSocket or the REST fallback? |
+| `static_ws_rate_limited_total` | Counter | How often is the Redis token bucket rejecting frames? |
+| `static_broadcast_duration_seconds` | Histogram | How long does a Redis pub/sub publish take? (1ms–1s buckets) |
+| `static_socket_tokens_total{event}` | Counter | Are tokens minted but never consumed? (reconnect-loop smell) |
+| `static_transmissions_pruned_total` | Counter | Is the TTL pruning task doing work? |
+
+**Design decisions:**
+- **No `channel_id` or `operator_id` labels, on purpose.** Channels are user-created and unbounded - one time series per channel is a textbook cardinality explosion. Aggregate counts answer the operational question ("is the system healthy?"); per-channel introspection is a job for logs, not metrics.
+- **The connection gauge lives in the hub, not the WebSocket handler.** `hub.register`/`unregister` is the single point where sockets enter and leave, so an increment can never be orphaned from its decrement. A membership check guards the decrement - `unregister` runs in a `finally` block, and a double call would otherwise drift the gauge negative.
+- **Label values are pre-registered at import time.** All `result`/`source`/`event` series exist from boot at zero, so `rate()` queries and Grafana legends don't flicker into existence on first increment.
+- **Custom histogram buckets for broadcast latency.** A local Redis publish lands in single-digit milliseconds; the default buckets (5ms–10s) would dump every observation into the first two and make p95 meaningless. The buckets run 1ms–1s instead.
+- **Single-process registry, by deliberate trade-off.** The default `prometheus_client` registry is per-process, which is correct for the current single-process uvicorn deployment. Running `uvicorn --workers N` would silo counters per worker - the same lesson as the Redis pub/sub fan-out: in-process state doesn't survive horizontal scaling. The fix (`prometheus_client.multiprocess` with `PROMETHEUS_MULTIPROC_DIR` and `livesum` gauges) is documented but not implemented until there's a multi-worker deployment to consume it.
+
+The dashboard surfaces request rate by handler, p50/p95/p99 latency, 5xx rate, active WebSocket connections, transmissions by ingress path, connect outcomes by close code, token-bucket rejections, broadcast publish latency, and socket-token lifecycle.
+
+> **Note:** `/metrics` is unauthenticated. It exposes traffic volumes and route names - no user data - which is an acceptable trade-off for a portfolio deployment. Locking it down (header check against a `METRICS_TOKEN`, or mounting the route behind an env flag) is a straightforward extension.
 
 ---
 
@@ -514,10 +559,10 @@ cd static-API
 
 # Copy and configure environment variables
 cp backend/.env.example backend/.env
-# Edit backend/.env — set SECRET_KEY at minimum;
+# Edit backend/.env - set SECRET_KEY at minimum;
 # add GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET to enable OAuth
 
-# Start all services (Postgres, Redis, API, Frontend)
+# Start all services (Postgres, Redis, API, Frontend, Prometheus, Grafana)
 docker compose up --build
 ```
 
@@ -525,6 +570,8 @@ The application will be available at:
 - **Frontend:** http://localhost:5173
 - **API:** http://localhost:8000
 - **Interactive API docs:** http://localhost:8000/docs
+- **Prometheus:** http://localhost:9090
+- **Grafana:** http://localhost:3000 (default `admin` / `admin`)
 
 ### Local Development
 
@@ -563,14 +610,15 @@ npm run dev
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL DSN — `postgresql://user:pass@host:port/db` |
-| `REDIS_URL` | Yes | Redis DSN — `redis://host:port` |
-| `SECRET_KEY` | Yes | JWT signing key — generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `DATABASE_URL` | Yes | PostgreSQL DSN - `postgresql://user:pass@host:port/db` |
+| `REDIS_URL` | Yes | Redis DSN - `redis://host:port` |
+| `SECRET_KEY` | Yes | JWT signing key - generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `GITHUB_CLIENT_ID` | No* | GitHub OAuth App client ID |
 | `GITHUB_CLIENT_SECRET` | No* | GitHub OAuth App client secret |
-| `GITHUB_REDIRECT_URI` | No* | OAuth callback URL — must match the GitHub App setting (e.g. `http://localhost:5173/auth/callback`) |
+| `GITHUB_REDIRECT_URI` | No* | OAuth callback URL - must match the GitHub App setting (e.g. `http://localhost:5173/auth/callback`) |
+| `GRAFANA_PASSWORD` | No | Grafana admin password for the Docker Compose stack (defaults to `admin`) |
 
-*GitHub OAuth variables are optional — omitting them disables the OAuth sign-in buttons in the UI.
+*GitHub OAuth variables are optional - omitting them disables the OAuth sign-in buttons in the UI.
 
 ### Frontend
 
@@ -595,7 +643,7 @@ npm run dev
 
 ## Testing
 
-Tests use `pytest` with **testcontainers** (a real Postgres container) and **fakeredis** for complete isolation — no mocking of database behaviour.
+Tests use `pytest` with **testcontainers** (a real Postgres container) and **fakeredis** for complete isolation - no mocking of database behaviour.
 
 ```bash
 cd backend
@@ -611,10 +659,11 @@ TESTING=1 uv run pytest tests/test_ws.py::test_transmission_rate_limit
 ```
 
 Test coverage spans:
-- **Auth** (`test_auth.py`) — registration, login, duplicate email, bad credentials, socket token lifecycle
-- **Channels** (`test_seances.py`) — CRUD, encrypted access control, controller operations, cipher key flow
-- **Transmissions** (`test_whispers.py`) — pagination, soft-delete, redaction permissions
-- **WebSocket** (`test_ws.py`) — connection auth, message protocol, rate limiting, contact broadcasting
+- **Auth** (`test_auth.py`) - registration, login, duplicate email, bad credentials, socket token lifecycle
+- **Channels** (`test_seances.py`) - CRUD, encrypted access control, controller operations, cipher key flow
+- **Transmissions** (`test_whispers.py`) - pagination, soft-delete, redaction permissions
+- **WebSocket** (`test_ws.py`) - connection auth, message protocol, rate limiting, contact broadcasting
+- **Metrics** (`test_metrics.py`) - `/metrics` endpoint, custom metric registration, request counting, self-scrape exclusion
 
 ---
 
@@ -623,6 +672,15 @@ Test coverage spans:
 ```
 static-API/
 ├── docker-compose.yml
+├── observability/
+│   ├── prometheus/
+│   │   └── prometheus.yml       # Scrape config (api:8000/metrics, 15s)
+│   └── grafana/
+│       ├── provisioning/
+│       │   ├── datasources/     # Prometheus datasource
+│       │   └── dashboards/      # Dashboard file provider
+│       └── dashboards/
+│           └── static-overview.json
 ├── backend/
 │   ├── pyproject.toml
 │   ├── alembic/
@@ -636,16 +694,18 @@ static-API/
 │   │   ├── test_auth.py
 │   │   ├── test_seances.py
 │   │   ├── test_whispers.py
-│   │   └── test_ws.py
+│   │   ├── test_ws.py
+│   │   └── test_metrics.py
 │   └── app/
-│       ├── main.py              # App factory, lifespan, CORS, startup
+│       ├── main.py              # App factory, lifespan, CORS, metrics, startup
 │       ├── database.py          # SQLAlchemy engine + session factory
 │       ├── core/
 │       │   ├── config.py        # Pydantic settings (env vars)
 │       │   ├── security.py      # JWT creation/validation, bcrypt
 │       │   ├── dependencies.py  # FastAPI DI: get_db, get_current_operator
 │       │   ├── callsigns.py     # Callsign generator
-│       │   └── limiter.py       # slowapi instance
+│       │   ├── limiter.py       # slowapi instance
+│       │   └── metrics.py       # Prometheus metric definitions
 │       ├── models/
 │       │   ├── operator.py      # github_id + nullable hashed_password
 │       │   ├── channel.py
